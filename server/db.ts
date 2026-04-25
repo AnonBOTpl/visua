@@ -27,7 +27,27 @@ await db.execute(`
 `);
 
 await db.execute(`
+  CREATE TABLE IF NOT EXISTS favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    title TEXT,
+    thumbnail_url TEXT NOT NULL,
+    source_url TEXT,
+    original_url TEXT,
+    source_domain TEXT,
+    width INTEGER,
+    height INTEGER,
+    saved_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(session_id, thumbnail_url)
+  )
+`);
+
+await db.execute(`
   CREATE INDEX IF NOT EXISTS idx_seen_session ON seen_images(session_id)
+`);
+
+await db.execute(`
+  CREATE INDEX IF NOT EXISTS idx_fav_session ON favorites(session_id)
 `);
 
 export async function markSeen(sessionId: string, urls: string[]): Promise<void> {
@@ -65,6 +85,46 @@ export async function clearSeen(sessionId: string): Promise<void> {
     sql: `DELETE FROM seen_images WHERE session_id = ?`,
     args: [sessionId],
   });
+}
+
+export async function addFavorite(sessionId: string, image: any): Promise<void> {
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO favorites (session_id, title, thumbnail_url, source_url, original_url, source_domain, width, height)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      sessionId,
+      image.title,
+      image.thumbnailUrl,
+      image.sourceUrl,
+      image.originalUrl,
+      image.sourceDomain,
+      image.width,
+      image.height
+    ],
+  });
+}
+
+export async function removeFavorite(sessionId: string, thumbnailUrl: string): Promise<void> {
+  await db.execute({
+    sql: `DELETE FROM favorites WHERE session_id = ? AND thumbnail_url = ?`,
+    args: [sessionId, thumbnailUrl],
+  });
+}
+
+export async function getFavorites(sessionId: string): Promise<any[]> {
+  const result = await db.execute({
+    sql: `SELECT * FROM favorites WHERE session_id = ? ORDER BY saved_at DESC`,
+    args: [sessionId],
+  });
+  return result.rows.map(r => ({
+    title: r.title,
+    thumbnailUrl: r.thumbnail_url,
+    sourceUrl: r.source_url,
+    originalUrl: r.original_url,
+    sourceDomain: r.source_domain,
+    width: r.width,
+    height: r.height,
+  }));
 }
 
 // Auto-cleanup: remove entries older than 30 days
