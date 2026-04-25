@@ -113,17 +113,17 @@ export async function removeFavorite(sessionId: string, thumbnailUrl: string): P
 
 export async function getFavorites(sessionId: string): Promise<any[]> {
   const result = await db.execute({
-    sql: `SELECT * FROM favorites WHERE session_id = ? ORDER BY saved_at DESC`,
+    sql: `SELECT title, thumbnail_url, source_url, original_url, source_domain, width, height FROM favorites WHERE session_id = ? ORDER BY saved_at DESC`,
     args: [sessionId],
   });
   return result.rows.map(r => ({
-    title: r.title,
-    thumbnailUrl: r.thumbnail_url,
-    sourceUrl: r.source_url,
-    originalUrl: r.original_url,
-    sourceDomain: r.source_domain,
-    width: r.width,
-    height: r.height,
+    title: r.title as string,
+    thumbnailUrl: r.thumbnail_url as string,
+    sourceUrl: r.source_url as string,
+    originalUrl: r.original_url as string,
+    sourceDomain: r.source_domain as string,
+    width: r.width as number,
+    height: r.height as number,
   }));
 }
 

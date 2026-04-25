@@ -476,11 +476,19 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
 
   const toggleFav = () => {
     if (isFav) {
-      removeFav.mutate({ thumbnailUrl: image.thumbnailUrl }, { onSuccess: () => utils.favs.list.invalidate() });
-      toast.success("Removed from favorites");
+      removeFav.mutate({ thumbnailUrl: image.thumbnailUrl }, {
+        onSuccess: () => {
+          utils.favs.list.invalidate();
+          toast.success("Removed from favorites");
+        }
+      });
     } else {
-      addFav.mutate(image, { onSuccess: () => utils.favs.list.invalidate() });
-      toast.success("Added to favorites");
+      addFav.mutate(image, {
+        onSuccess: () => {
+          utils.favs.list.invalidate();
+          toast.success("Added to favorites");
+        }
+      });
     }
   };
 
