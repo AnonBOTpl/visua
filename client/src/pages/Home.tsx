@@ -480,13 +480,30 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
         onSuccess: () => {
           utils.favs.list.invalidate();
           toast.success("Removed from favorites");
+        },
+        onError: (err) => {
+          toast.error(`Could not remove: ${err.message}`);
         }
       });
     } else {
-      addFav.mutate(image, {
+      // Pick only needed fields to avoid zod validation errors with extra props
+      const favData = {
+        title: image.title,
+        thumbnailUrl: image.thumbnailUrl,
+        sourceUrl: image.sourceUrl,
+        originalUrl: image.originalUrl,
+        sourceDomain: image.sourceDomain,
+        width: image.width,
+        height: image.height,
+      };
+      addFav.mutate(favData, {
         onSuccess: () => {
           utils.favs.list.invalidate();
           toast.success("Added to favorites");
+        },
+        onError: (err) => {
+          console.error("Fav add error:", err);
+          toast.error(`Could not save: ${err.message}`);
         }
       });
     }

@@ -11,6 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import FormData from "form-data";
+import axios from "axios";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +60,7 @@ async function startServer() {
         return;
       }
 
-      // Use form-data package which is more reliable in Node.js for binary uploads
+      // Axios is much more reliable with form-data in Node.js
       const formData = new FormData();
       formData.append("engine", "google_lens");
       formData.append("api_key", serpKey);
@@ -68,21 +69,17 @@ async function startServer() {
         contentType: req.file.mimetype,
       });
 
-      const serpRes = await fetch("https://serpapi.com/search.json", {
-        method: "POST",
-        body: formData as any,
-        headers: formData.getHeaders(),
+      console.log(`[upload] Sending file to SerpApi: ${req.file.originalname} (${req.file.size} bytes)`);
+
+      const serpRes = await axios.post("https://serpapi.com/search.json", formData, {
+        headers: {
+          ...formData.getHeaders(),
+        },
+        timeout: 30000,
       });
 
-      if (!serpRes.ok) {
-        const errText = await serpRes.text();
-        console.error("[upload] SerpApi error:", errText);
-        res.status(serpRes.status).json({ error: "Lens search failed" });
-        return;
-      }
-
-      const data = await serpRes.json();
-      res.json(data);
+      console.log(`[upload] SerpApi responded with status: ${serpRes.status}`);
+      res.json(serpRes.data);
     } catch (err) {
       console.error("[upload] failed:", err);
       res.status(500).json({ error: "Upload search failed" });
