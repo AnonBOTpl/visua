@@ -58,16 +58,22 @@ async function startServer() {
         return;
       }
 
+      // SerpApi for Google Lens file upload needs multipart/form-data
+      // In Node.js fetch (undici), we need to use the form-data package or
+      // the built-in FormData if available and correctly handled.
+      // However, sometimes SerpApi prefers it as a 'file' parameter.
+
       const formData = new FormData();
       formData.append("engine", "google_lens");
       formData.append("api_key", serpKey);
 
-      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
-      formData.append("file", blob, req.file.originalname);
+      // In Node 20+, we can use File to ensure filename is passed correctly in FormData
+      const file = new File([req.file.buffer], req.file.originalname, { type: req.file.mimetype });
+      formData.append("file", file);
 
       const serpRes = await fetch("https://serpapi.com/search.json", {
         method: "POST",
-        body: formData,
+        body: formData as any,
       });
 
       if (!serpRes.ok) {

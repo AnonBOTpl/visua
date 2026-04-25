@@ -4,7 +4,7 @@ import {
   Search, X, ExternalLink, Loader2, ImageOff,
   AlertCircle, Download, Shield, ShieldOff, SlidersHorizontal,
   Sun, Moon, Upload, EyeOff, Eye, Trash2, Copy, Maximize2,
-  ChevronDown, Check,
+  ChevronDown, Check, Heart, Bookmark,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -47,6 +47,8 @@ interface ImageResult {
   originalUrl?: string;
   width?: number;
   height?: number;
+  isSeen?: boolean;
+  source?: string;
 }
 
 type ImageType = "all" | "photo" | "clipart" | "gif" | "lineart" | "face";
@@ -363,18 +365,32 @@ function ImageCard({ image, seen, onClick }: { image: ImageResult; seen: boolean
 
   if (imgError) return null; // Don't show broken images
 
+  // Calculate aspect ratio if dimensions available
+  const aspectRatio = image.width && image.height ? image.width / image.height : null;
+
   return (
     <div
       className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-transform bg-card ${seen ? "opacity-40" : ""} ${isMobile ? "rounded-lg" : "rounded-xl"}`}
       onClick={onClick}
+      style={{
+        aspectRatio: aspectRatio ? `${aspectRatio}` : undefined,
+        minHeight: !loaded && !aspectRatio ? 160 : undefined
+      }}
     >
-      {!loaded && <div className="shimmer w-full rounded-xl" style={{ height: 160 }} />}
+      {!loaded && <div className="shimmer absolute inset-0 rounded-xl" />}
       <img src={image.thumbnailUrl} alt={image.title}
-          className={`w-full rounded-xl object-cover transition-all duration-300 group-hover:brightness-90 ${loaded ? "opacity-100" : "opacity-0 absolute inset-0"}`}
+          className={`w-full h-full rounded-xl object-cover transition-all duration-300 group-hover:brightness-90 ${loaded ? "opacity-100" : "opacity-0"}`}
           onLoad={() => setLoaded(true)} onError={() => setImgError(true)} loading="lazy" />
       <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
         {image.title && <p className="text-white text-[11px] font-medium line-clamp-2 leading-snug mb-0.5">{image.title}</p>}
-        {image.sourceDomain && <span className="text-white/60 text-[10px] truncate">{image.sourceDomain}</span>}
+        <div className="flex items-center justify-between gap-2">
+          {image.sourceDomain && <span className="text-white/60 text-[10px] truncate flex-1">{image.sourceDomain}</span>}
+          {image.source && (
+            <span className="text-[9px] px-1 rounded bg-white/20 text-white/90 font-medium uppercase tracking-wider">
+              {image.source === "serpapi" ? "Google" : image.source}
+            </span>
+          )}
+        </div>
         {image.width && image.height && <span className="text-white/50 text-[10px]">{image.width}×{image.height}</span>}
       </div>
       {seen && (
@@ -452,6 +468,22 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
     toast.success("Link copied to clipboard");
   };
 
+  const addFav = trpc.favs.add.useMutation();
+  const removeFav = trpc.favs.remove.useMutation();
+  const utils = trpc.useUtils();
+  const { data: currentFavs } = trpc.favs.list.useQuery();
+  const isFav = currentFavs?.some(f => f.thumbnailUrl === image.thumbnailUrl);
+
+  const toggleFav = () => {
+    if (isFav) {
+      removeFav.mutate({ thumbnailUrl: image.thumbnailUrl }, { onSuccess: () => utils.favs.list.invalidate() });
+      toast.success("Removed from favorites");
+    } else {
+      addFav.mutate(image, { onSuccess: () => utils.favs.list.invalidate() });
+      toast.success("Added to favorites");
+    }
+  };
+
   const infoBadge = info && (info.width > 0 || info.sizeKB !== null) ? (
     <div className="flex items-center gap-2 flex-wrap mt-1.5">
       {info.width > 0 && info.height > 0 && (
@@ -479,6 +511,12 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
       <div className="p-4 border-t border-border flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex gap-2 flex-1">
+            <Button onClick={toggleFav} variant="outline" size={isMobile ? "default" : "sm"}
+              className={`rounded-xl gap-2 border-border ${isMobile ? "h-11 w-11 p-0" : "h-9 px-3"} ${isFav ? "text-red-500 bg-red-500/10 border-red-500/20" : ""}`}
+              title={isFav ? "Remove from favorites" : "Add to favorites"}>
+              <Heart size={15} fill={isFav ? "currentColor" : "none"} />
+              {!isMobile && (isFav ? "Saved" : "Save")}
+            </Button>
             <Button onClick={handleDownload} disabled={downloading} size={isMobile ? "default" : "sm"}
               className={`rounded-xl gap-2 font-medium ${isMobile ? "h-11 px-5 text-sm flex-1" : "h-9 px-4 text-sm"}`}
               style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }}>
@@ -701,6 +739,7 @@ const PAGE_SIZE = 30;
 
 export default function Home() {
   const [dark, setDark] = useDarkMode();
+  const [view, setView] = useState<"search" | "favs">("search");
   const [activeQuery, setActiveQuery] = useState("");
   const [pages, setPages] = useState<number[]>([]); // list of start offsets fetched
   const [allResults, setAllResults] = useState<ImageResult[]>([]);
@@ -716,6 +755,7 @@ export default function Home() {
 
   const markSeenMutation = trpc.seen.mark.useMutation();
   const clearSeenMutation = trpc.seen.clear.useMutation();
+  const { data: favs } = trpc.favs.list.useQuery();
 
   const isQueryUrl = /^https?:\/\/.+/i.test(activeQuery);
   const { data, isLoading, isFetching, error, refetch } = trpc.search.images.useQuery(
@@ -759,6 +799,7 @@ export default function Home() {
 
   const handleSearch = useCallback(async (q: string) => {
     const isUrl = /^https?:\/\/.+/i.test(q);
+    setView("search");
 
     if (isUrl) {
       setLoadingMore(true);
@@ -788,7 +829,7 @@ export default function Home() {
   }, [filters, lensMutation]);
 
   const handleLoadMore = useCallback(() => {
-    if (loadingMore || isFetching || !hasMore) return;
+    if (loadingMore || isFetching || !hasMore || view === "favs") return;
     setLoadingMore(true);
     // Use the nextStart from the last result if available, otherwise just increment
     setCurrentStart((prev) => {
@@ -803,9 +844,14 @@ export default function Home() {
 
   const handleImageClick = (image: ImageResult) => {
     setModalImage(image);
-    // Mark as seen
+    // Mark as seen locally and on server
     const urls = [image.thumbnailUrl, image.originalUrl].filter(Boolean) as string[];
     setSeenUrls((prev) => new Set([...prev, ...urls]));
+    setAllResults((prev) => prev.map(r =>
+      (r.thumbnailUrl === image.thumbnailUrl || (r.originalUrl && r.originalUrl === image.originalUrl))
+      ? { ...r, isSeen: true }
+      : r
+    ));
     markSeenMutation.mutate({ urls });
   };
 
@@ -827,7 +873,7 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-border" style={{ backdropFilter: "blur(12px)" }}>
         <div className="container flex items-center gap-3 h-14 sm:h-16">
           <a href="/" className="flex items-center gap-2 flex-shrink-0"
-            onClick={(e) => { e.preventDefault(); setActiveQuery(""); setAllResults([]); setCurrentStart(0); }}>
+            onClick={(e) => { e.preventDefault(); setView("search"); setActiveQuery(""); setAllResults([]); setCurrentStart(0); }}>
             <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.55 0.18 35))" }}>
               <Search size={13} className="text-background" />
             </div>
@@ -856,8 +902,14 @@ export default function Home() {
               </button>
             )}
 
+            {/* Favorites */}
+            <button onClick={() => setView(v => v === "search" ? "favs" : "search")} title="My Favorites"
+              className={`p-2 rounded-xl transition-all ${view === "favs" ? "text-red-500 bg-red-500/10" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>
+              <Heart size={16} fill={view === "favs" ? "currentColor" : "none"} />
+            </button>
+
             {/* Clear seen */}
-            {seenUrls.size > 0 && (
+            {seenUrls.size > 0 && view === "search" && (
               <button onClick={handleClearSeen} title="Clear seen history"
                 className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all">
                 <Trash2 size={16} />
@@ -884,7 +936,32 @@ export default function Home() {
 
       {/* Main */}
       <main className="container py-6 sm:py-8">
-        {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} onLensResults={handleLensResults} />}
+        {view === "favs" ? (
+          <div>
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h1 className="text-3xl font-semibold gradient-text">My Favorites</h1>
+                <p className="text-muted-foreground text-sm mt-1">Your curated collection of beautiful images.</p>
+              </div>
+              <Button onClick={() => setView("search")} variant="outline" className="rounded-xl border-border">Back to search</Button>
+            </div>
+            {!favs?.length ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4"><Heart size={32} className="text-muted-foreground" /></div>
+                <h3 className="text-foreground font-medium">No favorites yet</h3>
+                <p className="text-muted-foreground text-sm max-w-xs">Heart some images during your search to see them here.</p>
+              </div>
+            ) : (
+              <div className="masonry-grid">
+                {favs.map((img, i) => (
+                  <ImageCard key={img.thumbnailUrl + i} image={img} seen={false} onClick={() => handleImageClick(img)} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} onLensResults={handleLensResults} />}
 
         {isLoadingFirst && (
           <div>
@@ -933,7 +1010,7 @@ export default function Home() {
                 <ImageCard
                   key={img.thumbnailUrl + i}
                   image={img}
-                  seen={!filterSeen && (seenUrls.has(img.thumbnailUrl) || seenUrls.has(img.originalUrl ?? ""))}
+                  seen={img.isSeen || seenUrls.has(img.thumbnailUrl) || (img.originalUrl ? seenUrls.has(img.originalUrl) : false)}
                   onClick={() => handleImageClick(img)}
                 />
               ))}
@@ -948,6 +1025,8 @@ export default function Home() {
               <div className="mt-4"><SkeletonGrid /></div>
             )}
           </div>
+        )}
+          </>
         )}
       </main>
 

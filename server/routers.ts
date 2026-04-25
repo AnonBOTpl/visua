@@ -1,7 +1,7 @@
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { searchImages, type ImageResult, type SearchSource } from "./imageSearch";
-import { markSeen, getSeenUrls, clearSeen } from "./db";
+import { markSeen, getSeenUrls, clearSeen, addFavorite, removeFavorite, getFavorites } from "./db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import crypto from "crypto";
@@ -66,8 +66,14 @@ export const appRouter = router({
           let source: SearchSource = "auto";
           let attempts = 0;
 
-          // If filtering seen, we might need to fetch more pages if everything on the first page is seen
-          while (allResultsFiltered.length < 20 && attempts < 5 && hasMore) {
+          // We always fetch at least one page.
+          // If filterSeen is true, we will only hide them visually on frontend if the user wants,
+          // OR we fetch enough UNSEEN results to fill the page.
+
+          const sid = getOrCreateSession(ctx.req, ctx.res);
+          const seenSet = await getSeenUrls(sid);
+
+          while (allResultsFiltered.length < 30 && attempts < 5 && hasMore) {
             const response = await searchImages(input.query, currentStart, {
               imageType: input.imageType,
               imageSize: input.imageSize,
@@ -79,17 +85,17 @@ export const appRouter = router({
             source = response.source;
             hasMore = response.hasMore;
 
-            let results = response.results;
+            let results = response.results.map(r => ({
+              ...r,
+              isSeen: seenSet.has(r.thumbnailUrl) || seenSet.has(r.originalUrl ?? "")
+            }));
+
             if (input.filterSeen) {
-              const sid = getOrCreateSession(ctx.req, ctx.res);
-              const seen = await getSeenUrls(sid);
-              results = results.filter(
-                (r) => !seen.has(r.thumbnailUrl) && !seen.has(r.originalUrl ?? "")
-              );
+              results = results.filter(r => !r.isSeen);
             }
 
             allResultsFiltered = [...allResultsFiltered, ...results];
-            if (allResultsFiltered.length >= 10 || !input.filterSeen) break;
+            if (!input.filterSeen || allResultsFiltered.length >= 20) break;
 
             currentStart += response.results.length || 20;
             attempts++;
@@ -125,6 +131,37 @@ export const appRouter = router({
         await clearSeen(sid);
         return { ok: true };
       }),
+  }),
+
+  favs: router({
+    add: publicProcedure
+      .input(z.object({
+        title: z.string().optional(),
+        thumbnailUrl: z.string(),
+        sourceUrl: z.string().optional(),
+        originalUrl: z.string().optional(),
+        sourceDomain: z.string().optional(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const sid = getOrCreateSession(ctx.req, ctx.res);
+        await addFavorite(sid, input);
+        return { ok: true };
+      }),
+
+    remove: publicProcedure
+      .input(z.object({ thumbnailUrl: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const sid = getOrCreateSession(ctx.req, ctx.res);
+        await removeFavorite(sid, input.thumbnailUrl);
+        return { ok: true };
+      }),
+
+    list: publicProcedure.query(async ({ ctx }) => {
+      const sid = getOrCreateSession(ctx.req, ctx.res);
+      return await getFavorites(sid);
+    }),
   }),
 });
 

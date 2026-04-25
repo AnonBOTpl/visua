@@ -13,6 +13,7 @@ export interface ImageResult {
   originalUrl?: string;
   width?: number;
   height?: number;
+  source?: "serpapi" | "bing" | "yandex";
 }
 
 export interface SearchResponse {
@@ -229,6 +230,7 @@ async function searchViaSerpApi(
     originalUrl: img.original,
     width: img.original_width,
     height: img.original_height,
+    source: "serpapi",
   }));
 
   return {
@@ -380,7 +382,7 @@ async function searchViaBing(
   if (!res.ok) throw new Error(`Bing HTTP ${res.status}`);
 
   const html = await res.text();
-  const results = parseBingHtml(html);
+  const results = parseBingHtml(html).map(r => ({ ...r, source: "bing" as const }));
 
   return {
     results,
@@ -494,7 +496,7 @@ async function searchViaYandex(
   const html = block?.html ?? "";
   const lastPage = block?.params?.lastPage ?? 1;
 
-  const results = parseYandexHtml(html);
+  const results = parseYandexHtml(html).map(r => ({ ...r, source: "yandex" as const }));
 
   return {
     results,
