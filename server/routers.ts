@@ -136,13 +136,13 @@ export const appRouter = router({
   favs: router({
     add: publicProcedure
       .input(z.object({
-        title: z.string().optional(),
+        title: z.string().optional().nullable(),
         thumbnailUrl: z.string(),
-        sourceUrl: z.string().optional(),
-        originalUrl: z.string().optional(),
-        sourceDomain: z.string().optional(),
-        width: z.number().optional(),
-        height: z.number().optional(),
+        sourceUrl: z.string().optional().nullable(),
+        originalUrl: z.string().optional().nullable(),
+        sourceDomain: z.string().optional().nullable(),
+        width: z.number().optional().nullable(),
+        height: z.number().optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
         const sid = getOrCreateSession(ctx.req, ctx.res);
