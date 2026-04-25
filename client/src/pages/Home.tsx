@@ -160,12 +160,42 @@ function MobileFilterDrawer({ filters, onChange, activeCount }: {
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</p>
               <div className="grid grid-cols-2 gap-2">
-                {SOURCE_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => onChange({ source: opt.value })}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-left transition-all ${filters.source === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                    {opt.label}
-                  </button>
-                ))}
+                <button onClick={() => onChange({ source: "auto" })}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border text-left transition-all ${filters.source === "auto" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                  <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${filters.source === "auto" ? "bg-primary" : ""}`}>
+                    {filters.source === "auto" && <Check size={10} className="text-primary-foreground" />}
+                  </div>
+                  All Sources (Auto)
+                </button>
+                {[
+                  { id: "serpapi", label: "Google" },
+                  { id: "bing", label: "Bing" },
+                  { id: "yandex", label: "Yandex" },
+                ].map((opt) => {
+                  const current = Array.isArray(filters.source) ? filters.source : filters.source === "auto" ? ["serpapi", "bing", "yandex"] : [filters.source];
+                  const isSelected = current.includes(opt.id) && filters.source !== "auto";
+
+                  const toggle = () => {
+                    let next: string[];
+                    if (current.includes(opt.id)) {
+                      next = current.filter(x => x !== opt.id);
+                    } else {
+                      next = [...current, opt.id];
+                    }
+                    if (next.length === 0 || next.length === 3) onChange({ source: "auto" });
+                    else onChange({ source: next });
+                  };
+
+                  return (
+                    <button key={opt.id} onClick={toggle}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border text-left transition-all ${isSelected ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                      <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${isSelected ? "bg-primary" : ""}`}>
+                        {isSelected && <Check size={10} className="text-primary-foreground" />}
+                      </div>
+                      {opt.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             {/* Type */}
@@ -586,8 +616,11 @@ function SkeletonGrid() {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-function Hero({ onSearch, filters, onFiltersChange }: {
-  onSearch: (q: string) => void; filters: Filters; onFiltersChange: (f: Partial<Filters>) => void;
+function Hero({ onSearch, filters, onFiltersChange, onLensResults }: {
+  onSearch: (q: string) => void;
+  filters: Filters;
+  onFiltersChange: (f: Partial<Filters>) => void;
+  onLensResults: (results: any[], source: string) => void;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -611,7 +644,7 @@ function Hero({ onSearch, filters, onFiltersChange }: {
               Search
             </Button>
           </div>
-          <ReverseImageSearch onResults={handleLensResults} />
+          <ReverseImageSearch onResults={onLensResults} />
         </div>
       </form>
       <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} /></div>
@@ -672,7 +705,7 @@ export default function Home() {
   const [pages, setPages] = useState<number[]>([]); // list of start offsets fetched
   const [allResults, setAllResults] = useState<ImageResult[]>([]);
   const [modalImage, setModalImage] = useState<ImageResult | null>(null);
-  const [source, setSource] = useState<"serpapi" | "bing" | "yandex" | null>(null);
+  const [source, setSource] = useState<"serpapi" | "bing" | "yandex" | "google_lens" | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [committedFilters, setCommittedFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -807,11 +840,11 @@ export default function Home() {
             {source && (
               <span className="text-[10px] px-2 py-1 rounded-full border whitespace-nowrap hidden xs:block"
                 style={{
-                  borderColor: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.4)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.4)" : "oklch(0.65 0.18 200 / 0.4)",
-                  color: source === "serpapi" ? "oklch(0.72 0.15 50)" : source === "yandex" ? "oklch(0.75 0.18 140)" : "oklch(0.65 0.18 200)",
-                  background: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.08)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.08)" : "oklch(0.65 0.18 200 / 0.08)",
+                  borderColor: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.4)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.4)" : source === "google_lens" ? "oklch(0.8 0.15 100 / 0.4)" : "oklch(0.65 0.18 200 / 0.4)",
+                  color: source === "serpapi" ? "oklch(0.72 0.15 50)" : source === "yandex" ? "oklch(0.75 0.18 140)" : source === "google_lens" ? "oklch(0.8 0.15 100)" : "oklch(0.65 0.18 200)",
+                  background: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.08)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.08)" : source === "google_lens" ? "oklch(0.8 0.15 100 / 0.08)" : "oklch(0.65 0.18 200 / 0.08)",
                 }}>
-                {source === "serpapi" ? "Google" : source === "yandex" ? "Yandex" : "Bing"}
+                {source === "serpapi" ? "Google" : source === "yandex" ? "Yandex" : source === "google_lens" ? "Google Lens" : "Bing"}
               </span>
             )}
 
@@ -851,7 +884,7 @@ export default function Home() {
 
       {/* Main */}
       <main className="container py-6 sm:py-8">
-        {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} />}
+        {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} onLensResults={handleLensResults} />}
 
         {isLoadingFirst && (
           <div>
