@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import {
-  Search, X, ExternalLink, ChevronDown, Loader2, ImageOff,
+  Search, X, ExternalLink, Loader2, ImageOff,
   AlertCircle, Download, Shield, ShieldOff, SlidersHorizontal,
   Sun, Moon, Upload, EyeOff, Eye, Trash2,
 } from "lucide-react";
@@ -35,6 +35,350 @@ function useDarkMode() {
   }, [dark]);
   return [dark, setDark] as const;
 }
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ImageResult {
+  title: string;
+  thumbnailUrl: string;
+  sourceUrl: string;
+  sourceDomain: string;
+  originalUrl?: string;
+  width?: number;
+  height?: number;
+}
+
+type ImageType = "all" | "photo" | "clipart" | "gif" | "lineart" | "face";
+type ImageSize = "all" | "Small" | "Medium" | "Large" | "Wallpaper";
+type ImageColor = "all" | "color" | "Monochrome" | "Red" | "Orange" | "Yellow" | "Green" | "Blue" | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
+type SafeSearch = "active" | "off";
+type SearchSource = "auto" | "serpapi" | "bing" | "yandex";
+
+interface Filters {
+  imageType: ImageType;
+  imageSize: ImageSize;
+  imageColor: ImageColor;
+  safeSearch: SafeSearch;
+  source: SearchSource;
+}
+
+const DEFAULT_FILTERS: Filters = {
+  imageType: "all", imageSize: "all", imageColor: "all",
+  safeSearch: "active", source: "auto",
+};
+
+// ─── Filter options ───────────────────────────────────────────────────────────
+
+const SOURCE_OPTIONS: { value: SearchSource; label: string }[] = [
+  { value: "auto", label: "Auto (Google → Bing → Yandex)" },
+  { value: "serpapi", label: "Google Images" },
+  { value: "bing", label: "Bing Images" },
+  { value: "yandex", label: "Yandex Images" },
+];
+const TYPE_OPTIONS: { value: ImageType; label: string }[] = [
+  { value: "all", label: "All types" }, { value: "photo", label: "Photos" },
+  { value: "clipart", label: "Clipart" }, { value: "gif", label: "GIFs" },
+  { value: "lineart", label: "Line art" }, { value: "face", label: "Faces" },
+];
+const SIZE_OPTIONS: { value: ImageSize; label: string }[] = [
+  { value: "all", label: "Any size" }, { value: "Small", label: "Small" },
+  { value: "Medium", label: "Medium" }, { value: "Large", label: "Large" },
+  { value: "Wallpaper", label: "Wallpaper" },
+];
+const COLOR_OPTIONS: { value: ImageColor; label: string; dot?: string }[] = [
+  { value: "all", label: "Any color" },
+  { value: "color", label: "Full color", dot: "linear-gradient(135deg,red,blue,green)" },
+  { value: "Monochrome", label: "B&W", dot: "linear-gradient(135deg,#000,#fff)" },
+  { value: "Red", label: "Red", dot: "#e53e3e" }, { value: "Orange", label: "Orange", dot: "#ed8936" },
+  { value: "Yellow", label: "Yellow", dot: "#ecc94b" }, { value: "Green", label: "Green", dot: "#48bb78" },
+  { value: "Teal", label: "Teal", dot: "#38b2ac" }, { value: "Blue", label: "Blue", dot: "#4299e1" },
+  { value: "Purple", label: "Purple", dot: "#9f7aea" }, { value: "Pink", label: "Pink", dot: "#ed64a6" },
+  { value: "Brown", label: "Brown", dot: "#a0522d" }, { value: "Black", label: "Black", dot: "#1a1a1a" },
+  { value: "Gray", label: "Gray", dot: "#718096" }, { value: "White", label: "White", dot: "#f7fafc" },
+];
+
+// ─── Dropdown ─────────────────────────────────────────────────────────────────
+
+function FilterDropdown<T extends string>({
+  label, value, options, onChange,
+}: {
+  label: string; value: T;
+  options: { value: T; label: string; dot?: string }[];
+  onChange: (v: T) => void;
+}) {
+  const selected = options.find((o) => o.value === value);
+  const isActive = value !== options[0].value;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap flex-shrink-0 ${isActive ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground bg-transparent"}`}>
+          {selected?.dot && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/20" style={{ background: selected.dot }} />}
+          <span>{selected?.label ?? label}</span>
+          <ChevronDown size={11} className="flex-shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6} className="rounded-xl border border-border shadow-2xl z-[9999] min-w-[150px] max-h-[300px] overflow-y-auto bg-card">
+        {options.map((opt) => (
+          <DropdownMenuItem key={opt.value} onClick={() => onChange(opt.value)}
+            className={`flex items-center gap-2.5 px-3 py-2.5 text-xs cursor-pointer ${opt.value === value ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"}`}>
+            {opt.dot !== undefined && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/20" style={{ background: opt.dot || "transparent" }} />}
+            {opt.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ─── Mobile filter drawer ─────────────────────────────────────────────────────
+
+function MobileFilterDrawer({ filters, onChange, activeCount }: {
+  filters: Filters; onChange: (f: Partial<Filters>) => void; activeCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap flex-shrink-0 ${activeCount > 0 ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
+        <SlidersHorizontal size={13} />
+        <span>Filters</span>
+        {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
+      </button>
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerContent className="flex flex-col bg-background" style={{ maxHeight: "85vh" }}>
+          <DrawerHeader className="border-b border-border pb-3">
+            <div className="flex items-center justify-between">
+              <DrawerTitle className="text-foreground font-semibold text-base">Filters</DrawerTitle>
+              <DrawerClose asChild>
+                <button className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
+              </DrawerClose>
+            </div>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+            {/* Source */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</p>
+              <div className="grid grid-cols-2 gap-2">
+                {SOURCE_OPTIONS.map((opt) => (
+                  <button key={opt.value} onClick={() => onChange({ source: opt.value })}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-left transition-all ${filters.source === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Type */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</p>
+              <div className="grid grid-cols-3 gap-2">
+                {TYPE_OPTIONS.map((opt) => (
+                  <button key={opt.value} onClick={() => onChange({ imageType: opt.value })}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-center transition-all ${filters.imageType === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Size */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Size</p>
+              <div className="grid grid-cols-3 gap-2">
+                {SIZE_OPTIONS.map((opt) => (
+                  <button key={opt.value} onClick={() => onChange({ imageSize: opt.value })}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-center transition-all ${filters.imageSize === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Color */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Color</p>
+              <div className="grid grid-cols-4 gap-2">
+                {COLOR_OPTIONS.map((opt) => (
+                  <button key={opt.value} onClick={() => onChange({ imageColor: opt.value })}
+                    className={`flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-xl text-[10px] font-medium border transition-all ${filters.imageColor === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    <span className="w-5 h-5 rounded-full border border-white/20 flex-shrink-0" style={{ background: opt.dot || "transparent" }} />
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Safe search */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Safe Search</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(["active", "off"] as SafeSearch[]).map((v) => (
+                  <button key={v} onClick={() => onChange({ safeSearch: v })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${filters.safeSearch === v ? (v === "off" ? "border-destructive/60 text-destructive bg-destructive/10" : "border-primary/60 text-primary bg-primary/10") : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {v === "active" ? <Shield size={12} /> : <ShieldOff size={12} />}
+                    {v === "active" ? "Safe On" : "Safe Off"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DrawerFooter className="border-t border-border pt-3">
+            <div className="flex gap-2">
+              {activeCount > 0 && (
+                <Button variant="outline" className="flex-1 border-border text-foreground hover:bg-accent rounded-xl" onClick={() => onChange(DEFAULT_FILTERS)}>Reset all</Button>
+              )}
+              <Button className="flex-1 rounded-xl font-medium" style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }} onClick={() => setOpen(false)}>Apply</Button>
+            </div>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </>
+  );
+}
+
+// ─── Filter bar ───────────────────────────────────────────────────────────────
+
+function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Partial<Filters>) => void }) {
+  const isMobile = useIsMobile();
+  const activeCount = Object.entries(filters).filter(([k, v]) => {
+    if (k === "safeSearch") return v === "off";
+    return v !== "all" && v !== "auto";
+  }).length;
+
+  if (isMobile) return <MobileFilterDrawer filters={filters} onChange={onChange} activeCount={activeCount} />;
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+      <div className="flex items-center gap-1 text-muted-foreground flex-shrink-0 mr-1">
+        <SlidersHorizontal size={13} />
+        {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
+      </div>
+      <FilterDropdown label="Source" value={filters.source} options={SOURCE_OPTIONS} onChange={(v) => onChange({ source: v })} />
+      <FilterDropdown label="Type" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
+      <FilterDropdown label="Size" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
+      <FilterDropdown label="Color" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
+      <button onClick={() => onChange({ safeSearch: filters.safeSearch === "active" ? "off" : "active" })}
+        className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 flex-shrink-0 whitespace-nowrap ${filters.safeSearch === "off" ? "border-destructive/60 text-destructive bg-destructive/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
+        {filters.safeSearch === "active" ? <Shield size={12} /> : <ShieldOff size={12} />}
+        <span>Safe {filters.safeSearch === "active" ? "On" : "Off"}</span>
+      </button>
+      {activeCount > 0 && (
+        <button onClick={() => onChange(DEFAULT_FILTERS)} className="flex items-center gap-1 px-2 h-9 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+          <X size={11} />Reset
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Image card ───────────────────────────────────────────────────────────────
+
+function ImageCard({ image, seen, onClick }: { image: ImageResult; seen: boolean; onClick: () => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  return (
+    <div
+      className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-transform bg-card ${seen ? "opacity-40" : ""}`}
+      onClick={onClick}
+    >
+      {!loaded && !imgError && <div className="shimmer w-full rounded-xl" style={{ height: 160 }} />}
+      {imgError ? (
+        <div className="w-full flex items-center justify-center rounded-xl bg-muted" style={{ height: 160 }}>
+          <ImageOff className="text-muted-foreground" size={28} />
+        </div>
+      ) : (
+        <img src={image.thumbnailUrl} alt={image.title}
+          className={`w-full rounded-xl object-cover transition-all duration-300 group-hover:brightness-90 ${loaded ? "opacity-100" : "opacity-0 absolute inset-0"}`}
+          onLoad={() => setLoaded(true)} onError={() => setImgError(true)} loading="lazy" />
+      )}
+      <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
+        {image.title && <p className="text-white text-[11px] font-medium line-clamp-2 leading-snug mb-0.5">{image.title}</p>}
+        {image.sourceDomain && <span className="text-white/60 text-[10px] truncate">{image.sourceDomain}</span>}
+        {image.width && image.height && <span className="text-white/50 text-[10px]">{image.width}×{image.height}</span>}
+      </div>
+      {seen && (
+        <div className="absolute top-2 right-2 bg-black/60 rounded-full p-1">
+          <EyeOff size={10} className="text-white/70" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Download helper ──────────────────────────────────────────────────────────
+
+async function downloadImage(imgUrl: string, onStart: () => void, onDone: () => void) {
+  onStart();
+  try {
+    const res = await fetch(`/api/download?url=${encodeURIComponent(imgUrl)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const rawName = imgUrl.split("/").pop()?.split("?")[0] ?? "image";
+    const filename = rawName.includes(".") ? rawName : `${rawName}.jpg`;
+    const a = document.createElement("a");
+    a.href = blobUrl; a.download = filename; a.style.display = "none";
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1500);
+    toast.success("Image downloaded");
+  } catch (err) {
+    toast.error("Could not download this image");
+  } finally {
+    onDone();
+  }
+}
+
+// ─── Image info hook ──────────────────────────────────────────────────────────
+
+interface ImgInfo { width: number; height: number; sizeKB: number | null; }
+
+function useImageInfo(url: string | undefined): ImgInfo | null {
+  const [info, setInfo] = useState<ImgInfo | null>(null);
+  useEffect(() => {
+    if (!url) return;
+    setInfo(null);
+    const img = new Image();
+    img.onload = () => setInfo((p) => ({ width: img.naturalWidth, height: img.naturalHeight, sizeKB: p?.sizeKB ?? null }));
+    img.src = url;
+    fetch(`/api/download?url=${encodeURIComponent(url)}`)
+      .then(async (res) => {
+        const cl = res.headers.get("content-length");
+        const sizeKB = cl ? Math.round(parseInt(cl) / 1024) : null;
+        await res.blob(); // drain
+        setInfo((p) => p ? { ...p, sizeKB } : { width: 0, height: 0, sizeKB });
+      }).catch(() => {});
+  }, [url]);
+  return info;
+}
+
+// ─── Image preview modal/drawer ───────────────────────────────────────────────
+
+function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const isMobile = useIsMobile();
+  const previewUrl = image.originalUrl || image.thumbnailUrl;
+  const info = useImageInfo(previewUrl);
+
+  const handleDownload = () => {
+    if (!previewUrl) return;
+    downloadImage(previewUrl, () => setDownloading(true), () => setDownloading(false));
+  };
+
+  const infoBadge = info && (info.width > 0 || info.sizeKB !== null) ? (
+    <div className="flex items-center gap-2 flex-wrap mt-1.5">
+      {info.width > 0 && info.height > 0 && (
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">{info.width}×{info.height}</span>
+      )}
+      {info.sizeKB !== null && (
+        <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${info.sizeKB < 50 ? "bg-destructive/10 text-destructive" : info.sizeKB < 300 ? "bg-yellow-500/10 text-yellow-600" : "bg-green-500/10 text-green-600"}`}>
+          {info.sizeKB < 1024 ? `${info.sizeKB} KB` : `${(info.sizeKB / 1024).toFixed(1)} MB`}
+          {info.sizeKB < 50 && " · miniaturka!"}
+        </span>
+      )}
+    </div>
+  ) : null;
+
+  const previewContent = (
+    <>
+      <div className="flex-1 overflow-auto flex items-center justify-center p-4 min-h-[180px]">
+                                                   }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
