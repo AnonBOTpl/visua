@@ -4,6 +4,7 @@ import {
   Search, X, ExternalLink, Loader2, ImageOff,
   AlertCircle, Download, Shield, ShieldOff, SlidersHorizontal,
   Sun, Moon, Upload, EyeOff, Eye, Trash2, Copy, Maximize2,
+  ChevronDown, Check,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -52,7 +53,7 @@ type ImageType = "all" | "photo" | "clipart" | "gif" | "lineart" | "face";
 type ImageSize = "all" | "Small" | "Medium" | "Large" | "Wallpaper";
 type ImageColor = "all" | "color" | "Monochrome" | "Red" | "Orange" | "Yellow" | "Green" | "Blue" | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 type SafeSearch = "active" | "off";
-type SearchSource = "auto" | "serpapi" | "bing" | "yandex";
+type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | string[];
 
 interface Filters {
   imageType: ImageType;
@@ -232,13 +233,69 @@ function MobileFilterDrawer({ filters, onChange, activeCount }: {
   );
 }
 
+// ─── Source Filter ────────────────────────────────────────────────────────────
+
+function SourceFilter({ value, onChange }: { value: SearchSource; onChange: (v: SearchSource) => void }) {
+  const sources = [
+    { id: "serpapi", label: "Google" },
+    { id: "bing", label: "Bing" },
+    { id: "yandex", label: "Yandex" },
+  ];
+
+  const current = Array.isArray(value) ? value : value === "auto" ? sources.map(s => s.id) : [value];
+
+  const toggle = (id: string) => {
+    let next: string[];
+    if (current.includes(id)) {
+      next = current.filter(x => x !== id);
+    } else {
+      next = [...current, id];
+    }
+    if (next.length === 0) onChange("auto");
+    else if (next.length === sources.length && value === "auto") onChange(next); // Stay in manual if explicitly toggling
+    else if (next.length === sources.length) onChange("auto");
+    else onChange(next);
+  };
+
+  const label = value === "auto" ? "All Sources" : Array.isArray(value) ? `${value.length} Sources` : sources.find(s => s.id === value)?.label || "Source";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap flex-shrink-0 ${value !== "auto" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground bg-transparent"}`}>
+          <span>{label}</span>
+          <ChevronDown size={11} className="flex-shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6} className="rounded-xl border border-border shadow-2xl z-[9999] min-w-[150px] bg-card p-1">
+        <DropdownMenuItem onClick={() => onChange("auto")} className={`flex items-center gap-2 px-2 py-2 text-xs cursor-pointer rounded-lg ${value === "auto" ? "bg-primary/10 text-primary" : ""}`}>
+          <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${value === "auto" ? "bg-primary" : ""}`}>
+            {value === "auto" && <Check size={10} className="text-primary-foreground" />}
+          </div>
+          All Sources (Auto)
+        </DropdownMenuItem>
+        <div className="h-px bg-border my-1" />
+        {sources.map(s => (
+          <DropdownMenuItem key={s.id} onClick={(e) => { e.preventDefault(); toggle(s.id); }} className={`flex items-center gap-2 px-2 py-2 text-xs cursor-pointer rounded-lg ${current.includes(s.id) && value !== "auto" ? "bg-primary/5 text-foreground" : ""}`}>
+            <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${current.includes(s.id) ? "bg-primary" : ""}`}>
+              {current.includes(s.id) && <Check size={10} className="text-primary-foreground" />}
+            </div>
+            {s.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
 function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Partial<Filters>) => void }) {
   const isMobile = useIsMobile();
   const activeCount = Object.entries(filters).filter(([k, v]) => {
     if (k === "safeSearch") return v === "off";
-    return v !== "all" && v !== "auto";
+    if (k === "source") return v !== "auto";
+    return v !== "all";
   }).length;
 
   if (isMobile) return <MobileFilterDrawer filters={filters} onChange={onChange} activeCount={activeCount} />;
@@ -249,7 +306,7 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Part
         <SlidersHorizontal size={13} />
         {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
       </div>
-      <FilterDropdown label="Source" value={filters.source} options={SOURCE_OPTIONS} onChange={(v) => onChange({ source: v })} />
+      <SourceFilter value={filters.source} onChange={(v) => onChange({ source: v })} />
       <FilterDropdown label="Type" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
       <FilterDropdown label="Size" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
       <FilterDropdown label="Color" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
@@ -273,21 +330,18 @@ function ImageCard({ image, seen, onClick }: { image: ImageResult; seen: boolean
   const [loaded, setLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const isMobile = useIsMobile();
+
+  if (imgError) return null; // Don't show broken images
+
   return (
     <div
       className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-transform bg-card ${seen ? "opacity-40" : ""} ${isMobile ? "rounded-lg" : "rounded-xl"}`}
       onClick={onClick}
     >
-      {!loaded && !imgError && <div className="shimmer w-full rounded-xl" style={{ height: 160 }} />}
-      {imgError ? (
-        <div className="w-full flex items-center justify-center rounded-xl bg-muted" style={{ height: 160 }}>
-          <ImageOff className="text-muted-foreground" size={28} />
-        </div>
-      ) : (
-        <img src={image.thumbnailUrl} alt={image.title}
+      {!loaded && <div className="shimmer w-full rounded-xl" style={{ height: 160 }} />}
+      <img src={image.thumbnailUrl} alt={image.title}
           className={`w-full rounded-xl object-cover transition-all duration-300 group-hover:brightness-90 ${loaded ? "opacity-100" : "opacity-0 absolute inset-0"}`}
           onLoad={() => setLoaded(true)} onError={() => setImgError(true)} loading="lazy" />
-      )}
       <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
         {image.title && <p className="text-white text-[11px] font-medium line-clamp-2 leading-snug mb-0.5">{image.title}</p>}
         {image.sourceDomain && <span className="text-white/60 text-[10px] truncate">{image.sourceDomain}</span>}
@@ -471,26 +525,34 @@ function ReverseImageSearch({ onResults }: { onResults: (results: any[], source:
   const lensMutation = trpc.search.lens.useMutation();
 
   const handleFile = async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image too large (max 5MB)");
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image too large (max 10MB)");
       return;
     }
 
     setLoading(true);
     try {
-      // In a real app, we'd upload to a server and get a URL.
-      // For this demo/audit, we'll suggest using a URL directly or
-      // explain that we need a public URL for Google Lens.
-      // But let's try to convert to base64 and use a mock/future endpoint.
+      const formData = new FormData();
+      formData.append("image", file);
 
-      toast.info("Google Lens requires a public image URL. Please paste an image URL in the search bar for now, or use a public upload.");
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
 
-      // Since I can't easily implement a public upload here,
-      // I will implement the UI to show how it WOULD work with the backend.
+      if (!res.ok) throw new Error("Upload failed");
 
-      // If we had a public URL:
-      // const res = await lensMutation.mutateAsync({ imageUrl: "..." });
-      // onResults(res.results, res.source);
+      const data = await res.json();
+      const images = (data.visual_matches ?? []).map((img: any) => ({
+        title: img.title ?? "",
+        thumbnailUrl: img.thumbnail ?? "",
+        sourceUrl: img.link ?? "",
+        sourceDomain: img.source ?? "",
+        originalUrl: img.thumbnail ?? "",
+      }));
+
+      onResults(images, "google_lens");
+      toast.success("Image analyzed successfully");
     } catch (err) {
       toast.error("Lens search failed");
     } finally {
@@ -549,9 +611,7 @@ function Hero({ onSearch, filters, onFiltersChange }: {
               Search
             </Button>
           </div>
-          <ReverseImageSearch onResults={(results, source) => {
-            // This would be called by the file upload success
-          }} />
+          <ReverseImageSearch onResults={handleLensResults} />
         </div>
       </form>
       <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} /></div>
@@ -637,9 +697,15 @@ export default function Home() {
       setAllResults(data.results);
     } else {
       setAllResults((prev) => {
-        // Deduplicate by thumbnailUrl
+        // Deduplicate by thumbnailUrl AND originalUrl to be safe
         const existing = new Set(prev.map((r) => r.thumbnailUrl));
         const newOnes = data.results.filter((r) => !existing.has(r.thumbnailUrl));
+
+        // Also ensure we don't have completely empty batches
+        if (newOnes.length === 0 && data.hasMore && !isFetching) {
+          // This shouldn't happen much with the server-side fix, but just in case
+        }
+
         return [...prev, ...newOnes];
       });
     }
@@ -649,6 +715,14 @@ export default function Home() {
   }, [data, currentStart]);
 
   const lensMutation = trpc.search.lens.useMutation();
+
+  const handleLensResults = useCallback((results: any[], source: string) => {
+    setActiveQuery("Image Search Result");
+    setAllResults(results);
+    setSource(source as any);
+    setHasMore(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const handleSearch = useCallback(async (q: string) => {
     const isUrl = /^https?:\/\/.+/i.test(q);

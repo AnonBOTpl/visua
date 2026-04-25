@@ -10,7 +10,10 @@ const imageTypeSchema = z.enum(["all","photo","clipart","gif","lineart","face"])
 const imageSizeSchema = z.enum(["all","Small","Medium","Large","Wallpaper"]).default("all");
 const imageColorSchema = z.enum(["all","color","Monochrome","Red","Orange","Yellow","Green","Blue","Purple","Pink","Brown","Black","Gray","Teal","White"]).default("all");
 const safeSearchSchema = z.enum(["active","off"]).default("active");
-const searchSourceSchema = z.enum(["auto","serpapi","bing","yandex","google_lens"]).default("auto");
+const searchSourceSchema = z.union([
+  z.enum(["auto","serpapi","bing","yandex","google_lens"]),
+  z.array(z.enum(["serpapi","bing","yandex"]))
+]).default("auto");
 
 // Simple session ID from cookie or generate new one
 function getOrCreateSession(req: any, res: any): string {
@@ -64,7 +67,7 @@ export const appRouter = router({
           let attempts = 0;
 
           // If filtering seen, we might need to fetch more pages if everything on the first page is seen
-          while (allResultsFiltered.length < 10 && attempts < 3 && hasMore) {
+          while (allResultsFiltered.length < 20 && attempts < 5 && hasMore) {
             const response = await searchImages(input.query, currentStart, {
               imageType: input.imageType,
               imageSize: input.imageSize,

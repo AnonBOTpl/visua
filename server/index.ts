@@ -9,6 +9,7 @@ import { appRouter } from "./routers";
 import { createContext } from "./_core/trpc";
 import path from "path";
 import { fileURLToPath } from "url";
+import multer from "multer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,15 +38,50 @@ async function startServer() {
 
   registerStorageProxy(app);
 
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  });
+
   // Upload proxy for reverse image search
-  // Security note: We limit the payload size to 5MB (handled by express.json above, but good to be explicit)
-  app.post("/api/upload", express.raw({ type: "image/*", limit: "5mb" }), async (req, res) => {
+  app.post("/api/upload", upload.single("image"), async (req, res) => {
     try {
-      // For personal use, we can suggest using an external image hosting API
-      // or a local storage if the user has a public IP.
-      res.status(501).json({ error: "Upload requires a public storage configuration (e.g. S3 or Imgur API) to work with Google Lens." });
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded" });
+        return;
+      }
+
+      // SerpApi allows sending the file directly as multipart
+      const serpKey = process.env.SERPAPI_KEY;
+      if (!serpKey) {
+        res.status(500).json({ error: "SerpApi key not configured" });
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("engine", "google_lens");
+      formData.append("api_key", serpKey);
+
+      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append("file", blob, req.file.originalname);
+
+      const serpRes = await fetch("https://serpapi.com/search.json", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!serpRes.ok) {
+        const errText = await serpRes.text();
+        console.error("[upload] SerpApi error:", errText);
+        res.status(serpRes.status).json({ error: "Lens search failed" });
+        return;
+      }
+
+      const data = await serpRes.json();
+      res.json(data);
     } catch (err) {
-      res.status(500).json({ error: "Upload failed" });
+      console.error("[upload] failed:", err);
+      res.status(500).json({ error: "Upload search failed" });
     }
   });
 

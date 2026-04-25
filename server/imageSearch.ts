@@ -29,7 +29,7 @@ export type ImageColor =
   | "Red" | "Orange" | "Yellow" | "Green" | "Blue"
   | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 export type SafeSearch = "active" | "off";
-export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "google_lens";
+export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "google_lens" | string[];
 
 export interface SearchFilters {
   imageType?: ImageType;
@@ -517,6 +517,35 @@ export async function searchImages(
   if (requestedSource === "google_lens") {
     return await searchViaGoogleLens(query); // here query is the imageUrl
   }
+
+  if (Array.isArray(requestedSource)) {
+    const promises = requestedSource.map(s =>
+      searchImages(query, start, { ...filters, source: s as any }).catch(err => {
+        console.error(`[imageSearch] multi-search failed for ${s}:`, err);
+        return null;
+      })
+    );
+    const results = await Promise.all(promises);
+    const validResults = results.filter((r): r is SearchResponse => r !== null);
+
+    if (validResults.length === 0) throw new Error("All search sources failed");
+
+    // Interleave results
+    const combined: ImageResult[] = [];
+    const maxLen = Math.max(...validResults.map(r => r.results.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const res of validResults) {
+        if (res.results[i]) combined.push(res.results[i]);
+      }
+    }
+
+    return {
+      results: combined,
+      source: "serpapi", // placeholder
+      hasMore: validResults.some(r => r.hasMore),
+    };
+  }
+
   if (requestedSource === "bing") {
     return await searchViaBing(query, start, filters);
   }
