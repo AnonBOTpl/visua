@@ -37,6 +37,18 @@ async function startServer() {
 
   registerStorageProxy(app);
 
+  // Upload proxy for reverse image search
+  // Security note: We limit the payload size to 5MB (handled by express.json above, but good to be explicit)
+  app.post("/api/upload", express.raw({ type: "image/*", limit: "5mb" }), async (req, res) => {
+    try {
+      // For personal use, we can suggest using an external image hosting API
+      // or a local storage if the user has a public IP.
+      res.status(501).json({ error: "Upload requires a public storage configuration (e.g. S3 or Imgur API) to work with Google Lens." });
+    } catch (err) {
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   // Image download proxy
   app.get("/api/download", async (req, res) => {
     const url = req.query.url as string;

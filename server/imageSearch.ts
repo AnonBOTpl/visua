@@ -29,7 +29,7 @@ export type ImageColor =
   | "Red" | "Orange" | "Yellow" | "Green" | "Blue"
   | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 export type SafeSearch = "active" | "off";
-export type SearchSource = "auto" | "serpapi" | "bing" | "yandex";
+export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "google_lens";
 
 export interface SearchFilters {
   imageType?: ImageType;
@@ -236,6 +236,56 @@ async function searchViaSerpApi(
     source: "serpapi",
     hasMore: results.length >= 20,
     total: data.search_information?.total_results,
+  };
+}
+
+// ─── Google Lens (SerpApi) ───────────────────────────────────────────────────
+
+export async function searchViaGoogleLens(
+  imageUrl: string
+): Promise<SearchResponse> {
+  const apiKey = process.env.SERPAPI_KEY;
+  if (!apiKey) throw new Error("SERPAPI_KEY not set");
+
+  const params: Record<string, string> = {
+    engine: "google_lens",
+    url: imageUrl,
+    api_key: apiKey,
+  };
+
+  const url = `https://serpapi.com/search.json?${new URLSearchParams(params).toString()}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`SerpApi Google Lens HTTP ${res.status}: ${body}`);
+  }
+
+  const data = (await res.json()) as {
+    visual_matches?: Array<{
+      title?: string;
+      thumbnail?: string;
+      link?: string;
+      source?: string;
+    }>;
+    error?: string;
+  };
+
+  if (data.error) throw new Error(`SerpApi error: ${data.error}`);
+
+  const images = data.visual_matches ?? [];
+  const results: ImageResult[] = images.map((img) => ({
+    title: img.title ?? "",
+    thumbnailUrl: img.thumbnail ?? "",
+    sourceUrl: img.link ?? "",
+    sourceDomain: img.source ?? extractDomain(img.link ?? ""),
+    originalUrl: img.thumbnail ?? "",
+  }));
+
+  return {
+    results,
+    source: "serpapi",
+    hasMore: false,
   };
 }
 
@@ -464,6 +514,9 @@ export async function searchImages(
   const requestedSource = filters.source ?? "auto";
 
   // Explicit source selection
+  if (requestedSource === "google_lens") {
+    return await searchViaGoogleLens(query); // here query is the imageUrl
+  }
   if (requestedSource === "bing") {
     return await searchViaBing(query, start, filters);
   }

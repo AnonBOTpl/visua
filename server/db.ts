@@ -32,11 +32,23 @@ await db.execute(`
 
 export async function markSeen(sessionId: string, urls: string[]): Promise<void> {
   if (!urls.length) return;
-  for (const url of urls) {
-    await db.execute({
-      sql: `INSERT OR IGNORE INTO seen_images (session_id, image_url) VALUES (?, ?)`,
-      args: [sessionId, url],
-    });
+
+  // Use a transaction for better performance with multiple URLs
+  const statements = urls.map(url => ({
+    sql: `INSERT OR IGNORE INTO seen_images (session_id, image_url) VALUES (?, ?)`,
+    args: [sessionId, url],
+  }));
+
+  try {
+    await db.batch(statements);
+  } catch (err) {
+    console.error("[db] batch insert failed, falling back to sequential", err);
+    for (const url of urls) {
+      await db.execute({
+        sql: `INSERT OR IGNORE INTO seen_images (session_id, image_url) VALUES (?, ?)`,
+        args: [sessionId, url],
+      });
+    }
   }
 }
 
