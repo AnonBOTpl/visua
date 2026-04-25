@@ -88,20 +88,25 @@ export async function clearSeen(sessionId: string): Promise<void> {
 }
 
 export async function addFavorite(sessionId: string, image: any): Promise<void> {
-  await db.execute({
-    sql: `INSERT OR IGNORE INTO favorites (session_id, title, thumbnail_url, source_url, original_url, source_domain, width, height)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      sessionId,
-      image.title,
-      image.thumbnailUrl,
-      image.sourceUrl,
-      image.originalUrl,
-      image.sourceDomain,
-      image.width,
-      image.height
-    ],
-  });
+  try {
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO favorites (session_id, title, thumbnail_url, source_url, original_url, source_domain, width, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        sessionId,
+        image.title || null,
+        image.thumbnailUrl,
+        image.sourceUrl || null,
+        image.originalUrl || null,
+        image.sourceDomain || null,
+        image.width || null,
+        image.height || null
+      ],
+    });
+  } catch (err) {
+    console.error("[db] addFavorite failed:", err);
+    throw err;
+  }
 }
 
 export async function removeFavorite(sessionId: string, thumbnailUrl: string): Promise<void> {
