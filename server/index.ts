@@ -63,7 +63,7 @@ async function startServer() {
       // Axios is much more reliable with form-data in Node.js
       const formData = new FormData();
       formData.append("engine", "google_lens");
-      formData.append("api_key", serpKey);
+      // api_key is passed in URL
       formData.append("file", req.file.buffer, {
         filename: req.file.originalname,
         contentType: req.file.mimetype,
@@ -71,7 +71,7 @@ async function startServer() {
 
       console.log(`[upload] Sending file to SerpApi: ${req.file.originalname} (${req.file.size} bytes)`);
 
-      const serpRes = await axios.post("https://serpapi.com/search.json", formData, {
+      const serpRes = await axios.post(`https://serpapi.com/search?api_key=${serpKey}&output=json`, formData, {
         headers: {
           ...formData.getHeaders(),
         },

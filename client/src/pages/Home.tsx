@@ -153,7 +153,7 @@ function MobileFilterDrawer({ filters, onChange, activeCount }: {
             <div className="flex items-center justify-between">
               <DrawerTitle className="text-foreground font-semibold text-base">Filters</DrawerTitle>
               <DrawerClose asChild>
-                <button className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
+                <button aria-label="Close filters" className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
               </DrawerClose>
             </div>
           </DrawerHeader>
@@ -583,7 +583,7 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
                 {infoBadge}
               </div>
               <DrawerClose asChild>
-                <button className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent flex-shrink-0"><X size={18} /></button>
+                <button aria-label="Close preview" className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent flex-shrink-0"><X size={18} /></button>
               </DrawerClose>
             </div>
           </DrawerHeader>
@@ -602,7 +602,7 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
             {image.sourceDomain && <p className="text-muted-foreground text-xs mt-1">{image.sourceDomain}</p>}
             {infoBadge}
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0 p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
+          <button aria-label="Close preview" onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0 p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
         </div>
         {previewContent}
       </div>
@@ -773,7 +773,6 @@ export default function Home() {
   const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [committedFilters, setCommittedFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [filterSeen, setFilterSeen] = useState(false);
   const [seenUrls, setSeenUrls] = useState<Set<string>>(new Set());
   const [currentStart, setCurrentStart] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -784,7 +783,7 @@ export default function Home() {
 
   const isQueryUrl = /^https?:\/\/.+/i.test(activeQuery);
   const { data, isLoading, isFetching, error, refetch } = trpc.search.images.useQuery(
-    { query: activeQuery, start: currentStart, imageType: committedFilters.imageType, imageSize: committedFilters.imageSize, imageColor: committedFilters.imageColor, safeSearch: committedFilters.safeSearch, source: committedFilters.source, filterSeen },
+    { query: activeQuery, start: currentStart, imageType: committedFilters.imageType, imageSize: committedFilters.imageSize, imageColor: committedFilters.imageColor, safeSearch: committedFilters.safeSearch, source: committedFilters.source },
     { enabled: !!activeQuery && !isQueryUrl, retry: false, refetchOnWindowFocus: false, staleTime: 0 }
   );
 
@@ -884,6 +883,7 @@ export default function Home() {
     clearSeenMutation.mutate(undefined, {
       onSuccess: () => {
         setSeenUrls(new Set());
+        setAllResults((prev) => prev.map(r => ({ ...r, isSeen: false })));
         toast.success("Seen history cleared");
       }
     });
@@ -919,13 +919,6 @@ export default function Home() {
               </span>
             )}
 
-            {/* Filter seen toggle */}
-            {hasResults && (
-              <button onClick={() => setFilterSeen((v) => !v)} title={filterSeen ? "Show all images" : "Hide seen images"}
-                className={`p-2 rounded-xl transition-all ${filterSeen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>
-                {filterSeen ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            )}
 
             {/* Favorites */}
             <button onClick={() => setView(v => v === "search" ? "favs" : "search")} title="My Favorites"
@@ -934,7 +927,7 @@ export default function Home() {
             </button>
 
             {/* Clear seen */}
-            {seenUrls.size > 0 && view === "search" && (
+            {(seenUrls.size > 0 || allResults.some(r => r.isSeen)) && view === "search" && (
               <button onClick={handleClearSeen} title="Clear seen history"
                 className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all">
                 <Trash2 size={16} />
@@ -1023,11 +1016,6 @@ export default function Home() {
                 <span className="ml-2 text-xs">&middot; {allResults.length} images</span>
                 {seenUrls.size > 0 && <span className="ml-2 text-xs">&middot; {seenUrls.size} seen</span>}
               </p>
-              {filterSeen && (
-                <span className="text-[11px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  Hiding seen images
-                </span>
-              )}
             </div>
 
             <div className="masonry-grid">
