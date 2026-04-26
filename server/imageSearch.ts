@@ -23,19 +23,12 @@ export interface SearchResponse {
   total?: number;
 }
 
-export type ImageType = "all" | "photo" | "clipart" | "gif" | "lineart" | "face";
 export type ImageSize = "all" | "Small" | "Medium" | "Large" | "Wallpaper";
-export type ImageColor =
-  | "all" | "color" | "Monochrome"
-  | "Red" | "Orange" | "Yellow" | "Green" | "Blue"
-  | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 export type SafeSearch = "active" | "off";
 export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "brave" | string[];
 
 export interface SearchFilters {
-  imageType?: ImageType;
   imageSize?: ImageSize;
-  imageColor?: ImageColor;
   safeSearch?: SafeSearch;
   source?: SearchSource;
 }
@@ -59,14 +52,6 @@ function getRandomUserAgent() {
 
 // ─── SerpApi filter mappings ──────────────────────────────────────────────────
 
-const SERPAPI_TYPE_MAP: Record<string, string> = {
-  photo: "photo",
-  clipart: "clipart",
-  gif: "animated",
-  lineart: "lineart",
-  face: "face",
-};
-
 const SERPAPI_SIZE_MAP: Record<string, string> = {
   Small: "isz:s",
   Medium: "isz:m",
@@ -74,32 +59,7 @@ const SERPAPI_SIZE_MAP: Record<string, string> = {
   Wallpaper: "isz:lt,islt:4mp",
 };
 
-const SERPAPI_COLOR_MAP: Record<string, string> = {
-  color: "color",
-  Monochrome: "bw",
-  Red: "red",
-  Orange: "orange",
-  Yellow: "yellow",
-  Green: "green",
-  Blue: "blue",
-  Purple: "purple",
-  Pink: "pink",
-  Brown: "brown",
-  Black: "black",
-  Gray: "gray",
-  Teal: "teal",
-  White: "white",
-};
-
 // ─── Bing filter mappings ─────────────────────────────────────────────────────
-
-const BING_TYPE_MAP: Record<string, string> = {
-  photo: "photo",
-  clipart: "clipart",
-  gif: "animatedgif",
-  lineart: "linedrawing",
-  face: "face",
-};
 
 const BING_SIZE_MAP: Record<string, string> = {
   Small: "small",
@@ -108,55 +68,13 @@ const BING_SIZE_MAP: Record<string, string> = {
   Wallpaper: "wallpaper",
 };
 
-const BING_COLOR_MAP: Record<string, string> = {
-  color: "color",
-  Monochrome: "monochrome",
-  Red: "FGcls_RED",
-  Orange: "FGcls_ORANGE",
-  Yellow: "FGcls_YELLOW",
-  Green: "FGcls_GREEN",
-  Blue: "FGcls_BLUE",
-  Purple: "FGcls_PURPLE",
-  Pink: "FGcls_PINK",
-  Brown: "FGcls_BROWN",
-  Black: "FGcls_BLACK",
-  Gray: "FGcls_GRAY",
-  Teal: "FGcls_TEAL",
-  White: "FGcls_WHITE",
-};
-
 // ─── Yandex filter mappings ───────────────────────────────────────────────────
-
-const YANDEX_TYPE_MAP: Record<string, string> = {
-  photo: "photo",
-  clipart: "clipart",
-  gif: "gif",
-  lineart: "graphics",
-  face: "face",
-};
 
 const YANDEX_SIZE_MAP: Record<string, string> = {
   Small: "small",
   Medium: "medium",
   Large: "large",
   Wallpaper: "wallpaper",
-};
-
-const YANDEX_COLOR_MAP: Record<string, string> = {
-  color: "color",
-  Monochrome: "gray",
-  Red: "red",
-  Orange: "orange",
-  Yellow: "yellow",
-  Green: "green",
-  Blue: "blue",
-  Purple: "violet",
-  Pink: "pink",
-  Brown: "brown",
-  Black: "black",
-  Gray: "gray",
-  Teal: "cyan",
-  White: "white",
 };
 
 // ─── SerpApi ──────────────────────────────────────────────────────────────────
@@ -177,22 +95,12 @@ async function searchViaSerpApi(
     num: "100",
   };
 
-  if (filters.imageType && filters.imageType !== "all") {
-    const mapped = SERPAPI_TYPE_MAP[filters.imageType];
-    if (mapped) params.image_type = mapped;
-  }
-
   const tbsParts: string[] = [];
   if (filters.imageSize && filters.imageSize !== "all") {
     const mapped = SERPAPI_SIZE_MAP[filters.imageSize];
     if (mapped) tbsParts.push(mapped);
   }
   if (tbsParts.length > 0) params.tbs = tbsParts.join(",");
-
-  if (filters.imageColor && filters.imageColor !== "all") {
-    const mapped = SERPAPI_COLOR_MAP[filters.imageColor];
-    if (mapped) params.image_color = mapped;
-  }
 
   const url = `https://serpapi.com/search.json?${new URLSearchParams(params).toString()}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -243,25 +151,9 @@ async function searchViaSerpApi(
 function buildBingQft(filters: SearchFilters): string {
   const parts: string[] = [];
 
-  if (filters.imageType && filters.imageType !== "all") {
-    const mapped = BING_TYPE_MAP[filters.imageType];
-    if (mapped) parts.push(`+filterui:photo-${mapped}`);
-  }
-
   if (filters.imageSize && filters.imageSize !== "all") {
     const mapped = BING_SIZE_MAP[filters.imageSize];
     if (mapped) parts.push(`+filterui:imagesize-${mapped}`);
-  }
-
-  if (filters.imageColor && filters.imageColor !== "all") {
-    const mapped = BING_COLOR_MAP[filters.imageColor];
-    if (mapped) {
-      if (mapped === "color" || mapped === "monochrome") {
-        parts.push(`+filterui:color2-${mapped}`);
-      } else {
-        parts.push(`+filterui:color2-FGcls_${filters.imageColor.toUpperCase()}`);
-      }
-    }
   }
 
   return parts.join("");
@@ -412,19 +304,9 @@ async function searchViaYandex(
     params.family = "yes";
   }
 
-  if (filters.imageType && filters.imageType !== "all") {
-    const mapped = YANDEX_TYPE_MAP[filters.imageType];
-    if (mapped) params.itype = mapped;
-  }
-
   if (filters.imageSize && filters.imageSize !== "all") {
     const mapped = YANDEX_SIZE_MAP[filters.imageSize];
     if (mapped) params.isize = mapped;
-  }
-
-  if (filters.imageColor && filters.imageColor !== "all") {
-    const mapped = YANDEX_COLOR_MAP[filters.imageColor];
-    if (mapped) params.icolor = mapped;
   }
 
   const url = `https://yandex.com/images/search?${new URLSearchParams(params).toString()}`;
@@ -530,14 +412,9 @@ export async function searchImages(
 
   if (filters.source === "auto" || !filters.source) {
     requestedSources = ["bing", "yandex"];
-    if (settings.brave_enabled === "true" && (settings.brave_api_key || process.env.BRAVE_API_KEY)) {
-      requestedSources.push("brave");
-    }
-    if (settings.serpapi_enabled === "true" && (settings.serpapi_key || process.env.SERPAPI_KEY)) {
-      requestedSources.push("serpapi");
-    }
   } else if (Array.isArray(filters.source)) {
     requestedSources = filters.source;
+    if (requestedSources.length === 0) requestedSources = ["bing", "yandex"];
   } else {
     requestedSources = [filters.source as string];
   }
@@ -561,10 +438,6 @@ export async function searchImages(
 
   if (responses.length === 0) {
     throw new Error("Wszystkie źródła wyszukiwania zawiodły");
-  }
-
-  if (responses.length === 1) {
-    return { ...responses[0], sources: requestedSources };
   }
 
   // Interleave and deduplicate results
