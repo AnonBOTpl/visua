@@ -1,7 +1,7 @@
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { searchImages, type SearchSource } from "./imageSearch";
-import { markSeen, getSeenUrls, clearSeen, addFavorite, removeFavorite, getFavorites } from "./db";
+import { searchImages } from "./imageSearch";
+import { markSeen, getSeenUrls, clearSeen, addFavorite, removeFavorite, getFavorites, clearFavorites, getSettings } from "./db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import crypto from "crypto";
@@ -11,8 +11,8 @@ const imageSizeSchema = z.enum(["all","Small","Medium","Large","Wallpaper"]).def
 const imageColorSchema = z.enum(["all","color","Monochrome","Red","Orange","Yellow","Green","Blue","Purple","Pink","Brown","Black","Gray","Teal","White"]).default("all");
 const safeSearchSchema = z.enum(["active","off"]).default("active");
 const searchSourceSchema = z.union([
-  z.enum(["auto","serpapi","bing","yandex"]),
-  z.array(z.enum(["serpapi","bing","yandex"]))
+  z.enum(["auto","serpapi","bing","yandex","brave"]),
+  z.array(z.enum(["serpapi","bing","yandex","brave"]))
 ]).default("auto");
 
 // Simple session ID from cookie or generate new one
@@ -45,25 +45,35 @@ export const appRouter = router({
       }))
       .query(async ({ input, ctx }) => {
         try {
+          const settings = await getSettings();
+
           const response = await searchImages(input.query, input.start, {
             imageType: input.imageType,
             imageSize: input.imageSize,
             imageColor: input.imageColor,
-            safeSearch: input.safeSearch,
+            safeSearch: input.safeSearch || (settings.safesearch as any),
             source: input.source,
           });
 
           const sid = getOrCreateSession(ctx.req, ctx.res);
           const seenSet = await getSeenUrls(sid);
+          const seenMode = settings.seen_mode || "dim";
 
-          const results = response.results.map(r => ({
+          let results = response.results.map(r => ({
             ...r,
             isSeen: seenSet.has(r.thumbnailUrl) || seenSet.has(r.originalUrl ?? "")
           }));
 
+          if (seenMode === "hide") {
+            results = results.filter(r => !r.isSeen);
+          } else if (seenMode === "off") {
+            results = results.map(r => ({ ...r, isSeen: false }));
+          }
+
           return {
             results,
             source: response.source,
+            sources: response.sources,
             hasMore: response.hasMore,
             nextStart: input.start + response.results.length,
           };
@@ -121,6 +131,12 @@ export const appRouter = router({
     list: publicProcedure.query(async ({ ctx }) => {
       const sid = getOrCreateSession(ctx.req, ctx.res);
       return await getFavorites(sid);
+    }),
+
+    clear: publicProcedure.mutation(async ({ ctx }) => {
+      const sid = getOrCreateSession(ctx.req, ctx.res);
+      await clearFavorites(sid);
+      return { ok: true };
     }),
   }),
 });

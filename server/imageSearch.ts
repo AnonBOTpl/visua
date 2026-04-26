@@ -1,9 +1,8 @@
 /**
  * Image search service
- * Primary:  SerpApi (Google Images)
- * Fallback: Bing Images scraping + Yandex Images scraping
- * Supports: imageType, imageSize, imageColor, safeSearch, source selection
+ * Sources: Bing, Yandex, Brave, SerpApi
  */
+import { getSettings } from "./db";
 
 export interface ImageResult {
   title: string;
@@ -13,12 +12,13 @@ export interface ImageResult {
   originalUrl?: string;
   width?: number;
   height?: number;
-  source?: "serpapi" | "bing" | "yandex";
+  source?: "serpapi" | "bing" | "yandex" | "brave";
 }
 
 export interface SearchResponse {
   results: ImageResult[];
-  source: "serpapi" | "bing" | "yandex" | "mixed";
+  source: "serpapi" | "bing" | "yandex" | "brave" | "mixed";
+  sources?: string[];
   hasMore: boolean;
   total?: number;
 }
@@ -30,7 +30,7 @@ export type ImageColor =
   | "Red" | "Orange" | "Yellow" | "Green" | "Blue"
   | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 export type SafeSearch = "active" | "off";
-export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | string[];
+export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "brave" | string[];
 
 export interface SearchFilters {
   imageType?: ImageType;
@@ -164,11 +164,9 @@ const YANDEX_COLOR_MAP: Record<string, string> = {
 async function searchViaSerpApi(
   query: string,
   start: number = 0,
-  filters: SearchFilters = {}
+  filters: SearchFilters = {},
+  apiKey: string
 ): Promise<SearchResponse> {
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) throw new Error("SERPAPI_KEY not set");
-
   const params: Record<string, string> = {
     engine: "google_images",
     q: query,
@@ -460,6 +458,66 @@ async function searchViaYandex(
   };
 }
 
+// ─── Brave Search ─────────────────────────────────────────────────────────────
+
+async function searchViaBrave(
+  query: string,
+  start: number = 0,
+  filters: SearchFilters = {},
+  apiKey: string,
+  settings: Record<string, string>
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({
+    q: query,
+    count: "150",
+    safesearch: filters.safeSearch === "active" ? "strict" : "off",
+    search_lang: settings.search_lang || "en",
+    country: settings.search_country || "ALL",
+    offset: String(start),
+  });
+
+  const url = `https://api.search.brave.com/res/v1/images/search?${params.toString()}`;
+  const res = await fetch(url, {
+    headers: {
+      "X-Subscription-Token": apiKey,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Brave HTTP ${res.status}: ${body}`);
+  }
+
+  const data = (await res.json()) as {
+    results?: Array<{
+      title: string;
+      url: string;
+      thumbnail: { src: string };
+      properties: { url: string; width: number; height: number };
+      meta_url: { hostname: string };
+    }>;
+  };
+
+  const results: ImageResult[] = (data.results ?? []).map(img => ({
+    title: img.title,
+    thumbnailUrl: img.thumbnail.src,
+    sourceUrl: img.url,
+    sourceDomain: img.meta_url.hostname,
+    originalUrl: img.properties.url,
+    width: img.properties.width,
+    height: img.properties.height,
+    source: "brave",
+  }));
+
+  return {
+    results,
+    source: "brave",
+    hasMore: results.length >= 100,
+  };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function searchImages(
@@ -467,10 +525,17 @@ export async function searchImages(
   start: number = 0,
   filters: SearchFilters = {}
 ): Promise<SearchResponse> {
+  const settings = await getSettings();
   let requestedSources: string[] = [];
 
   if (filters.source === "auto" || !filters.source) {
     requestedSources = ["bing", "yandex"];
+    if (settings.brave_enabled === "true" && (settings.brave_api_key || process.env.BRAVE_API_KEY)) {
+      requestedSources.push("brave");
+    }
+    if (settings.serpapi_enabled === "true" && (settings.serpapi_key || process.env.SERPAPI_KEY)) {
+      requestedSources.push("serpapi");
+    }
   } else if (Array.isArray(filters.source)) {
     requestedSources = filters.source;
   } else {
@@ -481,31 +546,44 @@ export async function searchImages(
   const promises = requestedSources.map(s => {
     if (s === "bing") return searchViaBing(query, start, filters).catch(() => null);
     if (s === "yandex") return searchViaYandex(query, start, filters).catch(() => null);
-    if (s === "serpapi" && process.env.SERPAPI_KEY) return searchViaSerpApi(query, start, filters).catch(() => null);
+    if (s === "brave") {
+      const key = settings.brave_api_key || process.env.BRAVE_API_KEY;
+      if (key) return searchViaBrave(query, start, filters, key, settings).catch(() => null);
+    }
+    if (s === "serpapi") {
+      const key = settings.serpapi_key || process.env.SERPAPI_KEY;
+      if (key) return searchViaSerpApi(query, start, filters, key).catch(() => null);
+    }
     return Promise.resolve(null);
   });
 
   const responses = (await Promise.all(promises)).filter((r): r is SearchResponse => r !== null);
 
   if (responses.length === 0) {
-    throw new Error("All search sources failed");
+    throw new Error("Wszystkie źródła wyszukiwania zawiodły");
   }
 
   if (responses.length === 1) {
-    return responses[0];
+    return { ...responses[0], sources: requestedSources };
   }
 
   // Interleave and deduplicate results
   const combined: ImageResult[] = [];
   const seenThumbs = new Set<string>();
+  const seenOriginals = new Set<string>();
   const maxResults = Math.max(...responses.map(r => r.results.length));
 
   for (let i = 0; i < maxResults; i++) {
     for (const resp of responses) {
       const item = resp.results[i];
-      if (item && !seenThumbs.has(item.thumbnailUrl)) {
-        combined.push(item);
-        seenThumbs.add(item.thumbnailUrl);
+      if (item) {
+        const thumbUrl = item.thumbnailUrl;
+        const originalUrl = item.originalUrl || "";
+        if (!seenThumbs.has(thumbUrl) && (!originalUrl || !seenOriginals.has(originalUrl))) {
+          combined.push(item);
+          seenThumbs.add(thumbUrl);
+          if (originalUrl) seenOriginals.add(originalUrl);
+        }
       }
     }
   }
@@ -513,6 +591,7 @@ export async function searchImages(
   return {
     results: combined,
     source: "mixed",
+    sources: responses.map(r => r.source),
     hasMore: responses.some(r => r.hasMore),
   };
 }
