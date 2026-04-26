@@ -362,7 +362,8 @@ async function searchViaBrave(
   const res = await fetch(url, {
     headers: {
       "X-Subscription-Token": apiKey,
-      Accept: "application/json",
+      "Accept": "application/json",
+      "Accept-Encoding": "gzip",
     },
     signal: AbortSignal.timeout(15000),
   });
