@@ -56,56 +56,30 @@ export const appRouter = router({
         imageColor: imageColorSchema.optional(),
         safeSearch: safeSearchSchema.optional(),
         source: searchSourceSchema.optional(),
-        filterSeen: z.boolean().default(false),
       }))
       .query(async ({ input, ctx }) => {
         try {
-          let currentStart = input.start;
-          let allResultsFiltered: ImageResult[] = [];
-          let hasMore = true;
-          let source: SearchSource = "auto";
-          let attempts = 0;
-
-          // We always fetch at least one page.
-          // If filterSeen is true, we will only hide them visually on frontend if the user wants,
-          // OR we fetch enough UNSEEN results to fill the page.
+          const response = await searchImages(input.query, input.start, {
+            imageType: input.imageType,
+            imageSize: input.imageSize,
+            imageColor: input.imageColor,
+            safeSearch: input.safeSearch,
+            source: input.source,
+          });
 
           const sid = getOrCreateSession(ctx.req, ctx.res);
           const seenSet = await getSeenUrls(sid);
 
-          while (allResultsFiltered.length < 30 && attempts < 5 && hasMore) {
-            const response = await searchImages(input.query, currentStart, {
-              imageType: input.imageType,
-              imageSize: input.imageSize,
-              imageColor: input.imageColor,
-              safeSearch: input.safeSearch,
-              source: input.source,
-            });
-
-            source = response.source;
-            hasMore = response.hasMore;
-
-            let results = response.results.map(r => ({
-              ...r,
-              isSeen: seenSet.has(r.thumbnailUrl) || seenSet.has(r.originalUrl ?? "")
-            }));
-
-            if (input.filterSeen) {
-              results = results.filter(r => !r.isSeen);
-            }
-
-            allResultsFiltered = [...allResultsFiltered, ...results];
-            if (!input.filterSeen || allResultsFiltered.length >= 20) break;
-
-            currentStart += response.results.length || 20;
-            attempts++;
-          }
+          const results = response.results.map(r => ({
+            ...r,
+            isSeen: seenSet.has(r.thumbnailUrl) || seenSet.has(r.originalUrl ?? "")
+          }));
 
           return {
-            results: allResultsFiltered,
-            source,
-            hasMore,
-            nextStart: currentStart,
+            results,
+            source: response.source,
+            hasMore: response.hasMore,
+            nextStart: input.start + response.results.length,
           };
         } catch (err) {
           throw new TRPCError({
