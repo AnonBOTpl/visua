@@ -3,8 +3,8 @@ import { trpc } from "@/lib/trpc";
 import {
   Search, X, ExternalLink, Loader2, ImageOff,
   AlertCircle, Download, Shield, ShieldOff, SlidersHorizontal,
-  Sun, Moon, Upload, EyeOff, Eye, Trash2, Copy, Maximize2,
-  ChevronDown, Check, Heart, Bookmark,
+  Sun, Moon, EyeOff, Trash2, Copy, Maximize2,
+  ChevronDown, Check, Heart,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/drawer";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useMobile";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // ─── Dark mode ────────────────────────────────────────────────────────────────
 
@@ -72,12 +73,6 @@ const DEFAULT_FILTERS: Filters = {
 
 // ─── Filter options ───────────────────────────────────────────────────────────
 
-const SOURCE_OPTIONS: { value: SearchSource; label: string }[] = [
-  { value: "auto", label: "Auto (Google → Bing → Yandex)" },
-  { value: "serpapi", label: "Google Images" },
-  { value: "bing", label: "Bing Images" },
-  { value: "yandex", label: "Yandex Images" },
-];
 const TYPE_OPTIONS: { value: ImageType; label: string }[] = [
   { value: "all", label: "All types" }, { value: "photo", label: "Photos" },
   { value: "clipart", label: "Clipart" }, { value: "gif", label: "GIFs" },
@@ -135,10 +130,12 @@ function FilterDropdown<T extends string>({
 
 // ─── Mobile filter drawer ─────────────────────────────────────────────────────
 
-function MobileFilterDrawer({ filters, onChange, activeCount }: {
-  filters: Filters; onChange: (f: Partial<Filters>) => void; activeCount: number;
+function MobileFilterDrawer({ filters, onChange, activeCount, hasSerpApi }: {
+  filters: Filters; onChange: (f: Partial<Filters>) => void; activeCount: number; hasSerpApi: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const useGoogle = Array.isArray(filters.source) ? filters.source.includes("serpapi") : filters.source === "serpapi";
+
   return (
     <>
       <button onClick={() => setOpen(true)}
@@ -158,48 +155,17 @@ function MobileFilterDrawer({ filters, onChange, activeCount }: {
             </div>
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto p-4 space-y-5">
-            {/* Source */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => onChange({ source: "auto" })}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border text-left transition-all ${filters.source === "auto" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                  <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${filters.source === "auto" ? "bg-primary" : ""}`}>
-                    {filters.source === "auto" && <Check size={10} className="text-primary-foreground" />}
-                  </div>
-                  All Sources (Auto)
-                </button>
-                {[
-                  { id: "serpapi", label: "Google" },
-                  { id: "bing", label: "Bing" },
-                  { id: "yandex", label: "Yandex" },
-                ].map((opt) => {
-                  const current = Array.isArray(filters.source) ? filters.source : filters.source === "auto" ? ["serpapi", "bing", "yandex"] : [filters.source];
-                  const isSelected = current.includes(opt.id) && filters.source !== "auto";
-
-                  const toggle = () => {
-                    let next: string[];
-                    if (current.includes(opt.id)) {
-                      next = current.filter(x => x !== opt.id);
-                    } else {
-                      next = [...current, opt.id];
-                    }
-                    if (next.length === 0 || next.length === 3) onChange({ source: "auto" });
-                    else onChange({ source: next });
-                  };
-
-                  return (
-                    <button key={opt.id} onClick={toggle}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border text-left transition-all ${isSelected ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                      <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${isSelected ? "bg-primary" : ""}`}>
-                        {isSelected && <Check size={10} className="text-primary-foreground" />}
-                      </div>
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Google Toggle */}
+            {hasSerpApi && (
+               <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-card">
+                 <label htmlFor="google-toggle-mobile" className="text-sm font-medium text-foreground">Use Google (SerpApi)</label>
+                 <Checkbox
+                   id="google-toggle-mobile"
+                   checked={useGoogle}
+                   onCheckedChange={(checked) => onChange({ source: checked ? ["serpapi", "bing", "yandex"] : "auto" })}
+                 />
+               </div>
+            )}
             {/* Type */}
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</p>
@@ -265,64 +231,9 @@ function MobileFilterDrawer({ filters, onChange, activeCount }: {
   );
 }
 
-// ─── Source Filter ────────────────────────────────────────────────────────────
-
-function SourceFilter({ value, onChange }: { value: SearchSource; onChange: (v: SearchSource) => void }) {
-  const sources = [
-    { id: "serpapi", label: "Google" },
-    { id: "bing", label: "Bing" },
-    { id: "yandex", label: "Yandex" },
-  ];
-
-  const current = Array.isArray(value) ? value : value === "auto" ? sources.map(s => s.id) : [value];
-
-  const toggle = (id: string) => {
-    let next: string[];
-    if (current.includes(id)) {
-      next = current.filter(x => x !== id);
-    } else {
-      next = [...current, id];
-    }
-    if (next.length === 0) onChange("auto");
-    else if (next.length === sources.length && value === "auto") onChange(next); // Stay in manual if explicitly toggling
-    else if (next.length === sources.length) onChange("auto");
-    else onChange(next);
-  };
-
-  const label = value === "auto" ? "All Sources" : Array.isArray(value) ? `${value.length} Sources` : sources.find(s => s.id === value)?.label || "Source";
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap flex-shrink-0 ${value !== "auto" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground bg-transparent"}`}>
-          <span>{label}</span>
-          <ChevronDown size={11} className="flex-shrink-0" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={6} className="rounded-xl border border-border shadow-2xl z-[9999] min-w-[150px] bg-card p-1">
-        <DropdownMenuItem onClick={() => onChange("auto")} className={`flex items-center gap-2 px-2 py-2 text-xs cursor-pointer rounded-lg ${value === "auto" ? "bg-primary/10 text-primary" : ""}`}>
-          <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${value === "auto" ? "bg-primary" : ""}`}>
-            {value === "auto" && <Check size={10} className="text-primary-foreground" />}
-          </div>
-          All Sources (Auto)
-        </DropdownMenuItem>
-        <div className="h-px bg-border my-1" />
-        {sources.map(s => (
-          <DropdownMenuItem key={s.id} onClick={(e) => { e.preventDefault(); toggle(s.id); }} className={`flex items-center gap-2 px-2 py-2 text-xs cursor-pointer rounded-lg ${current.includes(s.id) && value !== "auto" ? "bg-primary/5 text-foreground" : ""}`}>
-            <div className={`w-3.5 h-3.5 rounded border border-primary flex items-center justify-center ${current.includes(s.id) ? "bg-primary" : ""}`}>
-              {current.includes(s.id) && <Check size={10} className="text-primary-foreground" />}
-            </div>
-            {s.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
-function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Partial<Filters>) => void }) {
+function FilterBar({ filters, onChange, hasSerpApi }: { filters: Filters; onChange: (f: Partial<Filters>) => void; hasSerpApi: boolean }) {
   const isMobile = useIsMobile();
   const activeCount = Object.entries(filters).filter(([k, v]) => {
     if (k === "safeSearch") return v === "off";
@@ -330,7 +241,9 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Part
     return v !== "all";
   }).length;
 
-  if (isMobile) return <MobileFilterDrawer filters={filters} onChange={onChange} activeCount={activeCount} />;
+  const useGoogle = Array.isArray(filters.source) ? filters.source.includes("serpapi") : filters.source === "serpapi";
+
+  if (isMobile) return <MobileFilterDrawer filters={filters} onChange={onChange} activeCount={activeCount} hasSerpApi={hasSerpApi} />;
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
@@ -338,7 +251,18 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Part
         <SlidersHorizontal size={13} />
         {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
       </div>
-      <SourceFilter value={filters.source} onChange={(v) => onChange({ source: v })} />
+
+      {hasSerpApi && (
+        <div className="flex items-center gap-2 px-3 h-9 rounded-xl border border-border bg-transparent hover:border-border/80 transition-all flex-shrink-0">
+          <Checkbox
+            id="google-toggle"
+            checked={useGoogle}
+            onCheckedChange={(checked) => onChange({ source: checked ? ["serpapi", "bing", "yandex"] : "auto" })}
+          />
+          <label htmlFor="google-toggle" className="text-xs font-medium text-muted-foreground cursor-pointer select-none">Use Google (SerpApi)</label>
+        </div>
+      )}
+
       <FilterDropdown label="Type" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
       <FilterDropdown label="Size" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
       <FilterDropdown label="Color" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
@@ -437,11 +361,10 @@ function useImageInfo(url: string | undefined): ImgInfo | null {
     const img = new Image();
     img.onload = () => setInfo((p) => ({ width: img.naturalWidth, height: img.naturalHeight, sizeKB: p?.sizeKB ?? null }));
     img.src = url;
-    fetch(`/api/download?url=${encodeURIComponent(url)}`)
+    fetch(`/api/download?url=${encodeURIComponent(url)}`, { method: 'HEAD' })
       .then(async (res) => {
         const cl = res.headers.get("content-length");
         const sizeKB = cl ? Math.round(parseInt(cl) / 1024) : null;
-        await res.blob(); // drain
         setInfo((p) => p ? { ...p, sizeKB } : { width: 0, height: 0, sizeKB });
       }).catch(() => {});
   }, [url]);
@@ -486,7 +409,6 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
         }
       });
     } else {
-      // Pick only needed fields to avoid zod validation errors with extra props
       const favData = {
         title: image.title,
         thumbnailUrl: image.thumbnailUrl,
@@ -502,7 +424,6 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
           toast.success("Added to favorites");
         },
         onError: (err) => {
-          console.error("Fav add error:", err);
           toast.error(`Could not save: ${err.message}`);
         }
       });
@@ -610,62 +531,6 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
   );
 }
 
-// ─── Reverse image search ─────────────────────────────────────────────────────
-
-function ReverseImageSearch({ onResults }: { onResults: (results: any[], source: string) => void }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
-  const lensMutation = trpc.search.lens.useMutation();
-
-  const handleFile = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Image too large (max 10MB)");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append("image", file);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error("Upload failed");
-
-      const data = await res.json();
-      const images = (data.visual_matches ?? []).map((img: any) => ({
-        title: img.title ?? "",
-        thumbnailUrl: img.thumbnail ?? "",
-        sourceUrl: img.link ?? "",
-        sourceDomain: img.source ?? "",
-        originalUrl: img.thumbnail ?? "",
-      }));
-
-      onResults(images, "google_lens");
-      toast.success("Image analyzed successfully");
-    } catch (err) {
-      toast.error("Lens search failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <>
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-      <button onClick={() => fileRef.current?.click()} disabled={loading} title="Search by image"
-        onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith("image/")) handleFile(f); }}
-        onDragOver={(e) => e.preventDefault()}
-        className="flex items-center justify-center h-14 w-12 rounded-2xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all flex-shrink-0 disabled:opacity-50">
-        {loading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-      </button>
-    </>
-  );
-}
-
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function SkeletonGrid() {
@@ -679,11 +544,11 @@ function SkeletonGrid() {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-function Hero({ onSearch, filters, onFiltersChange, onLensResults }: {
+function Hero({ onSearch, filters, onFiltersChange, hasSerpApi }: {
   onSearch: (q: string) => void;
   filters: Filters;
   onFiltersChange: (f: Partial<Filters>) => void;
-  onLensResults: (results: any[], source: string) => void;
+  hasSerpApi: boolean;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -700,17 +565,16 @@ function Hero({ onSearch, filters, onFiltersChange, onLensResults }: {
         <div className="relative flex items-center gap-2">
           <div className="relative flex-1 flex items-center">
             <Search size={17} className="absolute left-4 text-muted-foreground pointer-events-none z-10" />
-            <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Search for any image or paste URL…"
+            <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Search for any image…"
               className="pl-11 pr-28 h-14 text-base rounded-2xl border-border bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/50" autoFocus />
             <Button type="submit" disabled={!value.trim()} className="absolute right-2 h-10 px-5 rounded-xl font-medium text-sm"
               style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }}>
               Search
             </Button>
           </div>
-          <ReverseImageSearch onResults={onLensResults} />
         </div>
       </form>
-      <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} /></div>
+      <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} hasSerpApi={hasSerpApi} /></div>
       <div className="mt-4 flex flex-wrap gap-2 justify-center">
         {["Architecture", "Nature", "Abstract art", "Space", "Portraits"].map((s) => (
           <button key={s} onClick={() => onSearch(s)} className="px-3 py-1.5 rounded-full text-xs text-muted-foreground border border-border hover:border-primary/50 hover:text-foreground transition-all active:scale-95">{s}</button>
@@ -766,25 +630,25 @@ export default function Home() {
   const [dark, setDark] = useDarkMode();
   const [view, setView] = useState<"search" | "favs">("search");
   const [activeQuery, setActiveQuery] = useState("");
-  const [pages, setPages] = useState<number[]>([]); // list of start offsets fetched
   const [allResults, setAllResults] = useState<ImageResult[]>([]);
   const [modalImage, setModalImage] = useState<ImageResult | null>(null);
-  const [source, setSource] = useState<"serpapi" | "bing" | "yandex" | "google_lens" | null>(null);
+  const [source, setSource] = useState<"serpapi" | "bing" | "yandex" | "mixed" | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [committedFilters, setCommittedFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [seenUrls, setSeenUrls] = useState<Set<string>>(new Set());
   const [currentStart, setCurrentStart] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const scrollPosRef = useRef(0);
 
+  const { data: config } = trpc.system.config.useQuery();
   const markSeenMutation = trpc.seen.mark.useMutation();
   const clearSeenMutation = trpc.seen.clear.useMutation();
   const { data: favs } = trpc.favs.list.useQuery();
 
-  const isQueryUrl = /^https?:\/\/.+/i.test(activeQuery);
   const { data, isLoading, isFetching, error, refetch } = trpc.search.images.useQuery(
     { query: activeQuery, start: currentStart, imageType: committedFilters.imageType, imageSize: committedFilters.imageSize, imageColor: committedFilters.imageColor, safeSearch: committedFilters.safeSearch, source: committedFilters.source },
-    { enabled: !!activeQuery && !isQueryUrl, retry: false, refetchOnWindowFocus: false, staleTime: 0 }
+    { enabled: !!activeQuery, retry: false, refetchOnWindowFocus: false, staleTime: 0 }
   );
 
   // Accumulate results as pages load
@@ -794,55 +658,18 @@ export default function Home() {
       setAllResults(data.results);
     } else {
       setAllResults((prev) => {
-        // Deduplicate by thumbnailUrl AND originalUrl to be safe
         const existing = new Set(prev.map((r) => r.thumbnailUrl));
         const newOnes = data.results.filter((r) => !existing.has(r.thumbnailUrl));
-
-        // Also ensure we don't have completely empty batches
-        if (newOnes.length === 0 && data.hasMore && !isFetching) {
-          // This shouldn't happen much with the server-side fix, but just in case
-        }
-
         return [...prev, ...newOnes];
       });
     }
-    setSource(data.source);
+    setSource(data.source as any);
     setHasMore(data.hasMore);
     setLoadingMore(false);
   }, [data, currentStart]);
 
-  const lensMutation = trpc.search.lens.useMutation();
-
-  const handleLensResults = useCallback((results: any[], source: string) => {
-    setActiveQuery("Image Search Result");
-    setAllResults(results);
-    setSource(source as any);
-    setHasMore(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
-
   const handleSearch = useCallback(async (q: string) => {
-    const isUrl = /^https?:\/\/.+/i.test(q);
     setView("search");
-
-    if (isUrl) {
-      setLoadingMore(true);
-      setActiveQuery(q);
-      setAllResults([]);
-      setSource(null);
-      try {
-        const res = await lensMutation.mutateAsync({ imageUrl: q });
-        setAllResults(res.results);
-        setSource(res.source);
-        setHasMore(false);
-      } catch (err) {
-        toast.error("Google Lens search failed");
-      } finally {
-        setLoadingMore(false);
-      }
-      return;
-    }
-
     setActiveQuery(q);
     setCurrentStart(0);
     setAllResults([]);
@@ -850,25 +677,26 @@ export default function Home() {
     setSource(null);
     setCommittedFilters(filters);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [filters, lensMutation]);
+  }, [filters]);
 
   const handleLoadMore = useCallback(() => {
     if (loadingMore || isFetching || !hasMore || view === "favs") return;
     setLoadingMore(true);
-    // Use the nextStart from the last result if available, otherwise just increment
     setCurrentStart((prev) => {
       if (data && 'nextStart' in data && typeof data.nextStart === 'number') {
         return data.nextStart;
       }
       return prev + PAGE_SIZE;
     });
-  }, [loadingMore, isFetching, hasMore, data]);
+  }, [loadingMore, isFetching, hasMore, data, view]);
 
   const sentinelRef = useInfiniteScroll(handleLoadMore, hasMore && !loadingMore && !isFetching);
 
   const handleImageClick = (image: ImageResult) => {
+    const scrollPos = window.scrollY;
+    console.log("Saving scroll position:", scrollPos);
+    scrollPosRef.current = scrollPos;
     setModalImage(image);
-    // Mark as seen locally and on server
     const urls = [image.thumbnailUrl, image.originalUrl].filter(Boolean) as string[];
     setSeenUrls((prev) => new Set([...prev, ...urls]));
     setAllResults((prev) => prev.map(r =>
@@ -877,6 +705,19 @@ export default function Home() {
       : r
     ));
     markSeenMutation.mutate({ urls });
+  };
+
+  const handleCloseModal = () => {
+    const scrollPos = scrollPosRef.current;
+    console.log("Restoring scroll position:", scrollPos);
+    setModalImage(null);
+    // Small delay to ensure any potential scroll-to-top from closing the modal/drawer is neutralized
+    setTimeout(() => {
+      window.scrollTo({ top: scrollPos, behavior: 'instant' as any });
+    }, 100);
+    setTimeout(() => {
+      window.scrollTo({ top: scrollPos, behavior: 'instant' as any });
+    }, 250);
   };
 
   const handleClearSeen = () => {
@@ -911,11 +752,11 @@ export default function Home() {
             {source && (
               <span className="text-[10px] px-2 py-1 rounded-full border whitespace-nowrap hidden xs:block"
                 style={{
-                  borderColor: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.4)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.4)" : source === "google_lens" ? "oklch(0.8 0.15 100 / 0.4)" : "oklch(0.65 0.18 200 / 0.4)",
-                  color: source === "serpapi" ? "oklch(0.72 0.15 50)" : source === "yandex" ? "oklch(0.75 0.18 140)" : source === "google_lens" ? "oklch(0.8 0.15 100)" : "oklch(0.65 0.18 200)",
-                  background: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.08)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.08)" : source === "google_lens" ? "oklch(0.8 0.15 100 / 0.08)" : "oklch(0.65 0.18 200 / 0.08)",
+                  borderColor: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.4)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.4)" : source === "mixed" ? "oklch(0.8 0.15 100 / 0.4)" : "oklch(0.65 0.18 200 / 0.4)",
+                  color: source === "serpapi" ? "oklch(0.72 0.15 50)" : source === "yandex" ? "oklch(0.75 0.18 140)" : source === "mixed" ? "oklch(0.8 0.15 100)" : "oklch(0.65 0.18 200)",
+                  background: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.08)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.08)" : source === "mixed" ? "oklch(0.8 0.15 100 / 0.08)" : "oklch(0.65 0.18 200 / 0.08)",
                 }}>
-                {source === "serpapi" ? "Google" : source === "yandex" ? "Yandex" : source === "google_lens" ? "Google Lens" : "Bing"}
+                {source === "serpapi" ? "Google" : source === "yandex" ? "Yandex" : source === "mixed" ? (committedFilters.source === "auto" ? "Auto (Bing+Yandex)" : "Combined") : "Bing"}
               </span>
             )}
 
@@ -946,7 +787,7 @@ export default function Home() {
         {activeQuery && (
           <div className="border-t border-border">
             <div className="container py-2">
-              <FilterBar filters={filters} onChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} />
+              <FilterBar filters={filters} onChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} hasSerpApi={!!config?.hasSerpApi} />
             </div>
           </div>
         )}
@@ -979,7 +820,7 @@ export default function Home() {
           </div>
         ) : (
           <>
-            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} onLensResults={handleLensResults} />}
+            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} hasSerpApi={!!config?.hasSerpApi} />}
 
         {isLoadingFirst && (
           <div>
@@ -1043,7 +884,7 @@ export default function Home() {
         )}
       </main>
 
-      {modalImage && <ImagePreview image={modalImage} onClose={() => setModalImage(null)} />}
+      {modalImage && <ImagePreview image={modalImage} onClose={handleCloseModal} />}
     </div>
   );
 }

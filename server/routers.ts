@@ -1,6 +1,6 @@
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { searchImages, type ImageResult, type SearchSource } from "./imageSearch";
+import { searchImages, type SearchSource } from "./imageSearch";
 import { markSeen, getSeenUrls, clearSeen, addFavorite, removeFavorite, getFavorites } from "./db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -11,7 +11,7 @@ const imageSizeSchema = z.enum(["all","Small","Medium","Large","Wallpaper"]).def
 const imageColorSchema = z.enum(["all","color","Monochrome","Red","Orange","Yellow","Green","Blue","Purple","Pink","Brown","Black","Gray","Teal","White"]).default("all");
 const safeSearchSchema = z.enum(["active","off"]).default("active");
 const searchSourceSchema = z.union([
-  z.enum(["auto","serpapi","bing","yandex","google_lens"]),
+  z.enum(["auto","serpapi","bing","yandex"]),
   z.array(z.enum(["serpapi","bing","yandex"]))
 ]).default("auto");
 
@@ -33,20 +33,6 @@ export const appRouter = router({
   system: systemRouter,
 
   search: router({
-    lens: publicProcedure
-      .input(z.object({ imageUrl: z.string().url() }))
-      .mutation(async ({ input }) => {
-        try {
-          const response = await searchImages(input.imageUrl, 0, { source: "google_lens" });
-          return response;
-        } catch (err) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: err instanceof Error ? err.message : "Lens search failed",
-          });
-        }
-      }),
-
     images: publicProcedure
       .input(z.object({
         query: z.string().min(1).max(200),

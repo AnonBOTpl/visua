@@ -1,8 +1,8 @@
 /**
  * Image search service
  * Primary:  SerpApi (Google Images)
- * Fallback: Bing Images scraping → Yandex Images scraping
- * Supports: imageType, imageSize, imageColor, safeSearch, source override
+ * Fallback: Bing Images scraping + Yandex Images scraping
+ * Supports: imageType, imageSize, imageColor, safeSearch, source selection
  */
 
 export interface ImageResult {
@@ -18,7 +18,7 @@ export interface ImageResult {
 
 export interface SearchResponse {
   results: ImageResult[];
-  source: "serpapi" | "bing" | "yandex";
+  source: "serpapi" | "bing" | "yandex" | "mixed";
   hasMore: boolean;
   total?: number;
 }
@@ -30,7 +30,7 @@ export type ImageColor =
   | "Red" | "Orange" | "Yellow" | "Green" | "Blue"
   | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 export type SafeSearch = "active" | "off";
-export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "google_lens" | string[];
+export type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | string[];
 
 export interface SearchFilters {
   imageType?: ImageType;
@@ -38,6 +38,23 @@ export interface SearchFilters {
   imageColor?: ImageColor;
   safeSearch?: SafeSearch;
   source?: SearchSource;
+}
+
+// ─── User-Agent Rotation ──────────────────────────────────────────────────────
+
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+];
+
+function getRandomUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
 // ─── SerpApi filter mappings ──────────────────────────────────────────────────
@@ -108,16 +125,7 @@ const BING_COLOR_MAP: Record<string, string> = {
   White: "FGcls_WHITE",
 };
 
-const BING_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.9",
-  Referer: "https://www.bing.com/",
-};
-
 // ─── Yandex filter mappings ───────────────────────────────────────────────────
-// Yandex uses itype=, isize=, icolor= query params
 
 const YANDEX_TYPE_MAP: Record<string, string> = {
   photo: "photo",
@@ -149,15 +157,6 @@ const YANDEX_COLOR_MAP: Record<string, string> = {
   Gray: "gray",
   Teal: "cyan",
   White: "white",
-};
-
-const YANDEX_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  Accept: "application/json, text/javascript, */*; q=0.01",
-  "Accept-Language": "en-US,en;q=0.9",
-  "X-Requested-With": "XMLHttpRequest",
-  Referer: "https://yandex.com/images/",
 };
 
 // ─── SerpApi ──────────────────────────────────────────────────────────────────
@@ -238,56 +237,6 @@ async function searchViaSerpApi(
     source: "serpapi",
     hasMore: results.length >= 20,
     total: data.search_information?.total_results,
-  };
-}
-
-// ─── Google Lens (SerpApi) ───────────────────────────────────────────────────
-
-export async function searchViaGoogleLens(
-  imageUrl: string
-): Promise<SearchResponse> {
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) throw new Error("SERPAPI_KEY not set");
-
-  const params: Record<string, string> = {
-    engine: "google_lens",
-    url: imageUrl,
-    api_key: apiKey,
-  };
-
-  const url = `https://serpapi.com/search.json?${new URLSearchParams(params).toString()}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`SerpApi Google Lens HTTP ${res.status}: ${body}`);
-  }
-
-  const data = (await res.json()) as {
-    visual_matches?: Array<{
-      title?: string;
-      thumbnail?: string;
-      link?: string;
-      source?: string;
-    }>;
-    error?: string;
-  };
-
-  if (data.error) throw new Error(`SerpApi error: ${data.error}`);
-
-  const images = data.visual_matches ?? [];
-  const results: ImageResult[] = images.map((img) => ({
-    title: img.title ?? "",
-    thumbnailUrl: img.thumbnail ?? "",
-    sourceUrl: img.link ?? "",
-    sourceDomain: img.source ?? extractDomain(img.link ?? ""),
-    originalUrl: img.thumbnail ?? "",
-  }));
-
-  return {
-    results,
-    source: "serpapi",
-    hasMore: false,
   };
 }
 
@@ -375,7 +324,12 @@ async function searchViaBing(
 
   const url = `https://www.bing.com/images/async?${params.toString()}`;
   const res = await fetch(url, {
-    headers: BING_HEADERS,
+    headers: {
+      "User-Agent": getRandomUserAgent(),
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      Referer: "https://www.bing.com/",
+    },
     signal: AbortSignal.timeout(15000),
   });
 
@@ -403,7 +357,6 @@ interface YandexSerpItem {
 
 function parseYandexHtml(html: string): ImageResult[] {
   const results: ImageResult[] = [];
-  // Yandex embeds image data in data-bem='{"serp-item":{...}}' attributes
   const pattern = /data-bem='(\{[^']+\})'/g;
   let match: RegExpExecArray | null;
 
@@ -417,10 +370,8 @@ function parseYandexHtml(html: string): ImageResult[] {
       const originalUrl = preview?.url ?? "";
       if (!originalUrl) continue;
 
-      // Yandex thumb URLs start with // — prepend https:
       let thumbUrl = si.thumb?.url ?? "";
       if (thumbUrl.startsWith("//")) thumbUrl = "https:" + thumbUrl;
-      // Decode HTML entities in thumb URL
       thumbUrl = thumbUrl.replace(/&amp;/g, "&");
 
       const sourceUrl = si.img_href ?? "";
@@ -448,7 +399,6 @@ async function searchViaYandex(
   start: number = 0,
   filters: SearchFilters = {}
 ): Promise<SearchResponse> {
-  // Yandex page number: p=0 is page 1, p=1 is page 2, etc.
   const page = Math.floor(start / 30);
 
   const params: Record<string, string> = {
@@ -460,7 +410,6 @@ async function searchViaYandex(
     }),
   };
 
-  // Safe search: family=yes enables strict filtering
   if (filters.safeSearch === "active") {
     params.family = "yes";
   }
@@ -482,7 +431,13 @@ async function searchViaYandex(
 
   const url = `https://yandex.com/images/search?${new URLSearchParams(params).toString()}`;
   const res = await fetch(url, {
-    headers: YANDEX_HEADERS,
+    headers: {
+      "User-Agent": getRandomUserAgent(),
+      Accept: "application/json, text/javascript, */*; q=0.01",
+      "Accept-Language": "en-US,en;q=0.9",
+      "X-Requested-With": "XMLHttpRequest",
+      Referer: "https://yandex.com/images/",
+    },
     signal: AbortSignal.timeout(15000),
   });
 
@@ -512,69 +467,54 @@ export async function searchImages(
   start: number = 0,
   filters: SearchFilters = {}
 ): Promise<SearchResponse> {
-  const serpKey = process.env.SERPAPI_KEY;
-  const requestedSource = filters.source ?? "auto";
+  let requestedSources: string[] = [];
 
-  // Explicit source selection
-  if (requestedSource === "google_lens") {
-    return await searchViaGoogleLens(query); // here query is the imageUrl
+  if (filters.source === "auto" || !filters.source) {
+    requestedSources = ["bing", "yandex"];
+  } else if (Array.isArray(filters.source)) {
+    requestedSources = filters.source;
+  } else {
+    requestedSources = [filters.source as string];
   }
 
-  if (Array.isArray(requestedSource)) {
-    const promises = requestedSource.map(s =>
-      searchImages(query, start, { ...filters, source: s as any }).catch(err => {
-        console.error(`[imageSearch] multi-search failed for ${s}:`, err);
-        return null;
-      })
-    );
-    const results = await Promise.all(promises);
-    const validResults = results.filter((r): r is SearchResponse => r !== null);
+  // Execute searches in parallel
+  const promises = requestedSources.map(s => {
+    if (s === "bing") return searchViaBing(query, start, filters).catch(() => null);
+    if (s === "yandex") return searchViaYandex(query, start, filters).catch(() => null);
+    if (s === "serpapi" && process.env.SERPAPI_KEY) return searchViaSerpApi(query, start, filters).catch(() => null);
+    return Promise.resolve(null);
+  });
 
-    if (validResults.length === 0) throw new Error("All search sources failed");
+  const responses = (await Promise.all(promises)).filter((r): r is SearchResponse => r !== null);
 
-    // Interleave results
-    const combined: ImageResult[] = [];
-    const maxLen = Math.max(...validResults.map(r => r.results.length));
-    for (let i = 0; i < maxLen; i++) {
-      for (const res of validResults) {
-        if (res.results[i]) combined.push(res.results[i]);
+  if (responses.length === 0) {
+    throw new Error("All search sources failed");
+  }
+
+  if (responses.length === 1) {
+    return responses[0];
+  }
+
+  // Interleave and deduplicate results
+  const combined: ImageResult[] = [];
+  const seenThumbs = new Set<string>();
+  const maxResults = Math.max(...responses.map(r => r.results.length));
+
+  for (let i = 0; i < maxResults; i++) {
+    for (const resp of responses) {
+      const item = resp.results[i];
+      if (item && !seenThumbs.has(item.thumbnailUrl)) {
+        combined.push(item);
+        seenThumbs.add(item.thumbnailUrl);
       }
     }
-
-    return {
-      results: combined,
-      source: "serpapi", // placeholder
-      hasMore: validResults.some(r => r.hasMore),
-    };
   }
 
-  if (requestedSource === "bing") {
-    return await searchViaBing(query, start, filters);
-  }
-  if (requestedSource === "yandex") {
-    return await searchViaYandex(query, start, filters);
-  }
-  if (requestedSource === "serpapi") {
-    if (!serpKey) throw new Error("SerpApi key not configured");
-    return await searchViaSerpApi(query, start, filters);
-  }
-
-  // Auto: try SerpApi → Bing → Yandex
-  if (serpKey) {
-    try {
-      return await searchViaSerpApi(query, start, filters);
-    } catch (err) {
-      console.warn("[imageSearch] SerpApi failed, falling back to Bing:", err);
-    }
-  }
-
-  try {
-    return await searchViaBing(query, start, filters);
-  } catch (err) {
-    console.warn("[imageSearch] Bing failed, falling back to Yandex:", err);
-  }
-
-  return await searchViaYandex(query, start, filters);
+  return {
+    results: combined,
+    source: "mixed",
+    hasMore: responses.some(r => r.hasMore),
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
