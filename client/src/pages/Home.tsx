@@ -4,7 +4,7 @@ import {
   Search, X, ExternalLink, Loader2, ImageOff,
   AlertCircle, Download, Shield, ShieldOff, SlidersHorizontal,
   Sun, Moon, EyeOff, Trash2, Copy, Maximize2,
-  ChevronDown, Check, Heart, Settings as SettingsIcon, Save, Key, Palette, Eye, Globe, Languages, Grid3X3, Smartphone, Laptop,
+  ChevronDown, Check, Heart, Settings as SettingsIcon, Save, Key, Palette, Eye, Globe, Languages, Grid3X3, Laptop,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -58,42 +58,22 @@ interface ImageResult {
   source?: string;
 }
 
-type ImageType = "all" | "photo" | "clipart" | "gif" | "lineart" | "face";
 type ImageSize = "all" | "Small" | "Medium" | "Large" | "Wallpaper";
-type ImageColor = "all" | "color" | "Monochrome" | "Red" | "Orange" | "Yellow" | "Green" | "Blue" | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 type SafeSearch = "active" | "off";
 type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "brave" | string[];
 
 interface Filters {
-  imageType: ImageType;
   imageSize: ImageSize;
-  imageColor: ImageColor;
   safeSearch: SafeSearch;
   source: SearchSource;
 }
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
-const TYPE_OPTIONS: { value: ImageType; label: string }[] = [
-  { value: "all", label: "Wszystkie typy" }, { value: "photo", label: "Zdjęcia" },
-  { value: "clipart", label: "Clipart" }, { value: "gif", label: "Animowane (GIF)" },
-  { value: "lineart", label: "Rysunek liniowy" }, { value: "face", label: "Twarze" },
-];
 const SIZE_OPTIONS: { value: ImageSize; label: string }[] = [
   { value: "all", label: "Dowolny rozmiar" }, { value: "Small", label: "Mały" },
   { value: "Medium", label: "Średni" }, { value: "Large", label: "Duży" },
   { value: "Wallpaper", label: "Tapeta" },
-];
-const COLOR_OPTIONS: { value: ImageColor; label: string; dot?: string }[] = [
-  { value: "all", label: "Dowolny kolor" },
-  { value: "color", label: "Kolorowe", dot: "linear-gradient(135deg,red,blue,green)" },
-  { value: "Monochrome", label: "Czarno-białe", dot: "linear-gradient(135deg,#000,#fff)" },
-  { value: "Red", label: "Czerwony", dot: "#e53e3e" }, { value: "Orange", label: "Pomarańczowy", dot: "#ed8936" },
-  { value: "Yellow", label: "Żółty", dot: "#ecc94b" }, { value: "Green", label: "Zielony", dot: "#48bb78" },
-  { value: "Teal", label: "Morski", dot: "#38b2ac" }, { value: "Blue", label: "Niebieski", dot: "#4299e1" },
-  { value: "Purple", label: "Fioletowy", dot: "#9f7aea" }, { value: "Pink", label: "Różowy", dot: "#ed64a6" },
-  { value: "Brown", label: "Brązowy", dot: "#a0522d" }, { value: "Black", label: "Czarny", dot: "#1a1a1a" },
-  { value: "Gray", label: "Szary", dot: "#718096" }, { value: "White", label: "Biały", dot: "#f7fafc" },
 ];
 
 const LANG_OPTIONS = [
@@ -259,15 +239,15 @@ function SettingsModal({ open, onOpenChange }: { open: boolean, onOpenChange: (o
         </div>
       </section>
 
-      {/* Sources & API */}
+      {/* API Keys */}
       <section className="space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
-          <Key size={16} /> Źródła i API
+          <Key size={16} /> Klucze API
         </h3>
         <div className="space-y-3">
           {[
-            { id: "brave", label: "Brave Search", enabledKey: "brave_enabled", setKey: "brave_api_key_set", state: braveKey, setState: setBraveKey },
-            { id: "serpapi", label: "Google (SerpApi)", enabledKey: "serpapi_enabled", setKey: "serpapi_key_set", state: serpapiKey, setState: setSerpapiKey },
+            { id: "brave", label: "Brave Search", setKey: "brave_api_key_set", state: braveKey, setState: setBraveKey },
+            { id: "serpapi", label: "Google (SerpApi)", setKey: "serpapi_key_set", state: serpapiKey, setState: setSerpapiKey },
           ].map(api => (
             <div key={api.id} className="p-4 rounded-xl border border-border bg-card/50 space-y-4">
               <div className="flex items-center justify-between">
@@ -275,10 +255,6 @@ function SettingsModal({ open, onOpenChange }: { open: boolean, onOpenChange: (o
                   <span className="text-sm font-semibold">{api.label}</span>
                   {settings[api.setKey] && <Check size={14} className="text-green-500" />}
                 </div>
-                <Checkbox
-                  checked={settings[api.enabledKey] === "true"}
-                  onCheckedChange={(checked) => handleUpdate(api.enabledKey, checked ? "true" : "false")}
-                />
               </div>
               <div className="relative">
                 <Input
@@ -412,40 +388,69 @@ function SettingsModal({ open, onOpenChange }: { open: boolean, onOpenChange: (o
 
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
-function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Partial<Filters>) => void }) {
-  const isMobile = useIsMobile();
-  const activeCount = Object.entries(filters).filter(([k, v]) => {
-    if (k === "safeSearch") return false; // In settings now
-    if (k === "source") return false; // In settings now
-    return v !== "all";
-  }).length;
+function FilterBar({ filters, onChange, settings }: { filters: Filters; onChange: (f: Partial<Filters>) => void; settings: any }) {
+  const sources = [
+    { id: "bing", label: "Bing + Yandex", always: true },
+    { id: "brave", label: "Brave", keySet: "brave_api_key_set" },
+    { id: "serpapi", label: "Google", keySet: "serpapi_key_set" },
+  ];
 
-  if (isMobile) {
-    return (
-       <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-         <FilterDropdown label="Typ" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
-         <FilterDropdown label="Rozmiar" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
-         <FilterDropdown label="Kolor" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
-       </div>
-    );
-  }
+  const currentSources = Array.isArray(filters.source) ? filters.source : ["bing", "yandex"];
+
+  const toggleSource = (id: string) => {
+    let next: string[];
+    if (id === "bing") {
+      if (currentSources.includes("bing")) {
+        next = currentSources.filter(s => s !== "bing" && s !== "yandex");
+      } else {
+        next = [...currentSources, "bing", "yandex"];
+      }
+    } else {
+      if (currentSources.includes(id)) {
+        next = currentSources.filter(s => s !== id);
+      } else {
+        next = [...currentSources, id];
+      }
+    }
+
+    if (next.length === 0) next = ["bing", "yandex"];
+    onChange({ source: next });
+  };
+
+  const isSelected = (id: string) => {
+    if (id === "bing") return currentSources.includes("bing") || currentSources.includes("yandex");
+    return currentSources.includes(id);
+  };
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
       <div className="flex items-center gap-1 text-muted-foreground flex-shrink-0 mr-1">
         <SlidersHorizontal size={13} />
-        {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
       </div>
-      <FilterDropdown label="Typ" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
+
+      {/* Multi-select sources */}
+      <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-border">
+        {sources.map(s => {
+          if (!s.always && (!settings || !settings[s.keySet])) return null;
+          const active = isSelected(s.id);
+          return (
+            <button key={s.id} onClick={() => toggleSource(s.id)}
+              className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap ${active ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
+              {active && <Check size={11} />}
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+
       <FilterDropdown label="Rozmiar" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
-      <FilterDropdown label="Kolor" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
     </div>
   );
 }
 
 // ─── Image card ───────────────────────────────────────────────────────────────
 
-function ImageCard({ image, seen, onClick, columns }: { image: ImageResult; seen: boolean; onClick: () => void; columns: string }) {
+function ImageCard({ image, seen, onClick, removing }: { image: ImageResult; seen: boolean; onClick: () => void; removing?: boolean }) {
   const [loaded, setLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const isMobile = useIsMobile();
@@ -456,7 +461,7 @@ function ImageCard({ image, seen, onClick, columns }: { image: ImageResult; seen
 
   return (
     <div
-      className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-transform bg-card ${seen ? "opacity-40" : ""} ${isMobile ? "rounded-lg" : "rounded-xl"}`}
+      className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-all duration-500 bg-card ${seen ? "opacity-40" : ""} ${isMobile ? "rounded-lg" : "rounded-xl"} ${removing ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
       onClick={onClick}
       style={{
         aspectRatio: aspectRatio ? `${aspectRatio}` : undefined,
@@ -706,10 +711,11 @@ function SkeletonGrid() {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-function Hero({ onSearch, filters, onFiltersChange }: {
+function Hero({ onSearch, filters, onFiltersChange, settings }: {
   onSearch: (q: string) => void;
   filters: Filters;
   onFiltersChange: (f: Partial<Filters>) => void;
+  settings: any;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -735,7 +741,7 @@ function Hero({ onSearch, filters, onFiltersChange }: {
           </div>
         </div>
       </form>
-      <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} /></div>
+      <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} settings={settings} /></div>
       <div className="mt-4 flex flex-wrap gap-2 justify-center">
         {["Architektura", "Przyroda", "Sztuka abstrakcyjna", "Kosmos", "Portrety"].map((s) => (
           <button key={s} onClick={() => onSearch(s)} className="px-3 py-1.5 rounded-full text-xs text-muted-foreground border border-border hover:border-primary/50 hover:text-foreground transition-all active:scale-95">{s}</button>
@@ -792,15 +798,16 @@ export default function Home() {
   const [activeQuery, setActiveQuery] = useState("");
   const [allResults, setAllResults] = useState<ImageResult[]>([]);
   const [modalImage, setModalImage] = useState<ImageResult | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [sources, setSources] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState<Filters>({
-    imageType: "all", imageSize: "all", imageColor: "all",
-    safeSearch: "active", source: "auto",
+    imageSize: "all",
+    safeSearch: "active", source: ["bing", "yandex"],
   });
   const [committedFilters, setCommittedFilters] = useState<Filters>({
-    imageType: "all", imageSize: "all", imageColor: "all",
-    safeSearch: "active", source: "auto",
+    imageSize: "all",
+    safeSearch: "active", source: ["bing", "yandex"],
   });
   const [seenUrls, setSeenUrls] = useState<Set<string>>(new Set());
   const [currentStart, setCurrentStart] = useState(0);
@@ -814,12 +821,11 @@ export default function Home() {
   const markSeenMutation = trpc.seen.mark.useMutation();
   const { data: favs } = trpc.favs.list.useQuery();
 
-  // Load default filters from settings when they arrive
+  // Load default filters from settings
   useEffect(() => {
     if (settings && !activeQuery) {
        setFilters(prev => ({
          ...prev,
-         imageType: (settings.default_image_type as any) || "all",
          imageSize: (settings.default_image_size as any) || "all",
          safeSearch: (settings.safesearch as any) || "active",
        }));
@@ -830,9 +836,7 @@ export default function Home() {
     {
       query: activeQuery,
       start: currentStart,
-      imageType: committedFilters.imageType,
       imageSize: committedFilters.imageSize,
-      imageColor: committedFilters.imageColor,
       safeSearch: committedFilters.safeSearch,
       source: committedFilters.source
     },
@@ -863,7 +867,6 @@ export default function Home() {
     setAllResults([]);
     setHasMore(false);
     setSources([]);
-    // Commit current filters (which might have been updated from defaults)
     setCommittedFilters(filters);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [filters]);
@@ -883,9 +886,10 @@ export default function Home() {
 
   const handleImageClick = (image: ImageResult) => {
     const scrollPos = window.scrollY;
-    console.log("Saving scroll position:", scrollPos);
     scrollPosRef.current = scrollPos;
     setModalImage(image);
+
+    // Mark seen
     const urls = [image.thumbnailUrl, image.originalUrl].filter(Boolean) as string[];
     setSeenUrls((prev) => new Set([...prev, ...urls]));
     setAllResults((prev) => prev.map(r =>
@@ -898,8 +902,18 @@ export default function Home() {
 
   const handleCloseModal = () => {
     const scrollPos = scrollPosRef.current;
-    console.log("Restoring scroll position:", scrollPos);
+    const currentImg = modalImage;
     setModalImage(null);
+
+    // Dynamic hide logic
+    if (settings?.seen_mode === "hide" && currentImg) {
+       setRemovingId(currentImg.thumbnailUrl);
+       setTimeout(() => {
+          setAllResults(prev => prev.filter(r => r.thumbnailUrl !== currentImg.thumbnailUrl));
+          setRemovingId(null);
+       }, 500);
+    }
+
     setTimeout(() => {
       window.scrollTo({ top: scrollPos, behavior: 'instant' as any });
     }, 100);
@@ -959,7 +973,7 @@ export default function Home() {
         {activeQuery && (
           <div className="border-t border-border">
             <div className="container py-2">
-              <FilterBar filters={filters} onChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} />
+              <FilterBar filters={filters} onChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} settings={settings} />
             </div>
           </div>
         )}
@@ -985,14 +999,14 @@ export default function Home() {
             ) : (
               <div className={gridClass === "masonry-grid" ? "masonry-grid" : "grid " + gridClass + " gap-4"}>
                 {favs.map((img, i) => (
-                  <ImageCard key={img.thumbnailUrl + i} image={img} seen={false} onClick={() => handleImageClick(img)} columns={gridColumns} />
+                  <ImageCard key={img.thumbnailUrl + i} image={img} seen={false} onClick={() => handleImageClick(img)} />
                 ))}
               </div>
             )}
           </div>
         ) : (
           <>
-            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} />}
+            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} settings={settings} />}
 
         {isLoadingFirst && (
           <div>
@@ -1038,7 +1052,7 @@ export default function Home() {
                   image={img}
                   seen={img.isSeen || seenUrls.has(img.thumbnailUrl) || (img.originalUrl ? seenUrls.has(img.originalUrl) : false)}
                   onClick={() => handleImageClick(img)}
-                  columns={gridColumns}
+                  removing={removingId === img.thumbnailUrl}
                 />
               ))}
             </div>

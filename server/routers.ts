@@ -6,9 +6,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import crypto from "crypto";
 
-const imageTypeSchema = z.enum(["all","photo","clipart","gif","lineart","face"]).default("all");
 const imageSizeSchema = z.enum(["all","Small","Medium","Large","Wallpaper"]).default("all");
-const imageColorSchema = z.enum(["all","color","Monochrome","Red","Orange","Yellow","Green","Blue","Purple","Pink","Brown","Black","Gray","Teal","White"]).default("all");
 const safeSearchSchema = z.enum(["active","off"]).default("active");
 const searchSourceSchema = z.union([
   z.enum(["auto","serpapi","bing","yandex","brave"]),
@@ -37,9 +35,7 @@ export const appRouter = router({
       .input(z.object({
         query: z.string().min(1).max(200),
         start: z.number().int().min(0).default(0),
-        imageType: imageTypeSchema.optional(),
         imageSize: imageSizeSchema.optional(),
-        imageColor: imageColorSchema.optional(),
         safeSearch: safeSearchSchema.optional(),
         source: searchSourceSchema.optional(),
       }))
@@ -48,9 +44,7 @@ export const appRouter = router({
           const settings = await getSettings();
 
           const response = await searchImages(input.query, input.start, {
-            imageType: input.imageType,
             imageSize: input.imageSize,
-            imageColor: input.imageColor,
             safeSearch: input.safeSearch || (settings.safesearch as any),
             source: input.source,
           });
