@@ -4,7 +4,7 @@ import {
   Search, X, ExternalLink, Loader2, ImageOff,
   AlertCircle, Download, Shield, ShieldOff, SlidersHorizontal,
   Sun, Moon, EyeOff, Trash2, Copy, Maximize2,
-  ChevronDown, Check, Heart,
+  ChevronDown, Check, Heart, Settings as SettingsIcon, Save, Key, Palette, Eye, Globe, Languages, Grid3X3, Smartphone, Laptop,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -19,23 +19,29 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useMobile";
 import { Checkbox } from "@/components/ui/checkbox";
 
-// ─── Dark mode ────────────────────────────────────────────────────────────────
+// ─── Dark mode & Theme ────────────────────────────────────────────────────────
 
-function useDarkMode() {
-  const [dark, setDark] = useState(() => {
-    try {
-      const s = localStorage.getItem("visua-theme");
-      if (s) return s === "dark";
-    } catch {}
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
+function useTheme(themeSetting: string) {
+  const [dark, setDark] = useState(false);
+
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("dark", dark);
-    root.classList.toggle("light", !dark);
-    try { localStorage.setItem("visua-theme", dark ? "dark" : "light"); } catch {}
-  }, [dark]);
-  return [dark, setDark] as const;
+    let isDark = false;
+
+    if (themeSetting === "dark") {
+      isDark = true;
+    } else if (themeSetting === "light") {
+      isDark = false;
+    } else {
+      isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+
+    setDark(isDark);
+    root.classList.toggle("dark", isDark);
+    root.classList.toggle("light", !isDark);
+  }, [themeSetting]);
+
+  return dark;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,7 +62,7 @@ type ImageType = "all" | "photo" | "clipart" | "gif" | "lineart" | "face";
 type ImageSize = "all" | "Small" | "Medium" | "Large" | "Wallpaper";
 type ImageColor = "all" | "color" | "Monochrome" | "Red" | "Orange" | "Yellow" | "Green" | "Blue" | "Purple" | "Pink" | "Brown" | "Black" | "Gray" | "Teal" | "White";
 type SafeSearch = "active" | "off";
-type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | string[];
+type SearchSource = "auto" | "serpapi" | "bing" | "yandex" | "brave" | string[];
 
 interface Filters {
   imageType: ImageType;
@@ -66,33 +72,60 @@ interface Filters {
   source: SearchSource;
 }
 
-const DEFAULT_FILTERS: Filters = {
-  imageType: "all", imageSize: "all", imageColor: "all",
-  safeSearch: "active", source: "auto",
-};
-
-// ─── Filter options ───────────────────────────────────────────────────────────
+// ─── Options ──────────────────────────────────────────────────────────────────
 
 const TYPE_OPTIONS: { value: ImageType; label: string }[] = [
-  { value: "all", label: "All types" }, { value: "photo", label: "Photos" },
-  { value: "clipart", label: "Clipart" }, { value: "gif", label: "GIFs" },
-  { value: "lineart", label: "Line art" }, { value: "face", label: "Faces" },
+  { value: "all", label: "Wszystkie typy" }, { value: "photo", label: "Zdjęcia" },
+  { value: "clipart", label: "Clipart" }, { value: "gif", label: "Animowane (GIF)" },
+  { value: "lineart", label: "Rysunek liniowy" }, { value: "face", label: "Twarze" },
 ];
 const SIZE_OPTIONS: { value: ImageSize; label: string }[] = [
-  { value: "all", label: "Any size" }, { value: "Small", label: "Small" },
-  { value: "Medium", label: "Medium" }, { value: "Large", label: "Large" },
-  { value: "Wallpaper", label: "Wallpaper" },
+  { value: "all", label: "Dowolny rozmiar" }, { value: "Small", label: "Mały" },
+  { value: "Medium", label: "Średni" }, { value: "Large", label: "Duży" },
+  { value: "Wallpaper", label: "Tapeta" },
 ];
 const COLOR_OPTIONS: { value: ImageColor; label: string; dot?: string }[] = [
-  { value: "all", label: "Any color" },
-  { value: "color", label: "Full color", dot: "linear-gradient(135deg,red,blue,green)" },
-  { value: "Monochrome", label: "B&W", dot: "linear-gradient(135deg,#000,#fff)" },
-  { value: "Red", label: "Red", dot: "#e53e3e" }, { value: "Orange", label: "Orange", dot: "#ed8936" },
-  { value: "Yellow", label: "Yellow", dot: "#ecc94b" }, { value: "Green", label: "Green", dot: "#48bb78" },
-  { value: "Teal", label: "Teal", dot: "#38b2ac" }, { value: "Blue", label: "Blue", dot: "#4299e1" },
-  { value: "Purple", label: "Purple", dot: "#9f7aea" }, { value: "Pink", label: "Pink", dot: "#ed64a6" },
-  { value: "Brown", label: "Brown", dot: "#a0522d" }, { value: "Black", label: "Black", dot: "#1a1a1a" },
-  { value: "Gray", label: "Gray", dot: "#718096" }, { value: "White", label: "White", dot: "#f7fafc" },
+  { value: "all", label: "Dowolny kolor" },
+  { value: "color", label: "Kolorowe", dot: "linear-gradient(135deg,red,blue,green)" },
+  { value: "Monochrome", label: "Czarno-białe", dot: "linear-gradient(135deg,#000,#fff)" },
+  { value: "Red", label: "Czerwony", dot: "#e53e3e" }, { value: "Orange", label: "Pomarańczowy", dot: "#ed8936" },
+  { value: "Yellow", label: "Żółty", dot: "#ecc94b" }, { value: "Green", label: "Zielony", dot: "#48bb78" },
+  { value: "Teal", label: "Morski", dot: "#38b2ac" }, { value: "Blue", label: "Niebieski", dot: "#4299e1" },
+  { value: "Purple", label: "Fioletowy", dot: "#9f7aea" }, { value: "Pink", label: "Różowy", dot: "#ed64a6" },
+  { value: "Brown", label: "Brązowy", dot: "#a0522d" }, { value: "Black", label: "Czarny", dot: "#1a1a1a" },
+  { value: "Gray", label: "Szary", dot: "#718096" }, { value: "White", label: "Biały", dot: "#f7fafc" },
+];
+
+const LANG_OPTIONS = [
+  { value: "en", label: "Angielski" },
+  { value: "pl", label: "Polski" },
+  { value: "all", label: "Wszystkie języki" },
+];
+
+const COUNTRY_OPTIONS = [
+  { value: "ALL", label: "Cały świat" },
+  { value: "PL", label: "Polska" },
+  { value: "US", label: "Stany Zjednoczone" },
+  { value: "UK", label: "Wielka Brytania" },
+  { value: "DE", label: "Niemcy" },
+];
+
+const THEME_OPTIONS = [
+  { value: "dark", label: "Ciemny", icon: Moon },
+  { value: "light", label: "Jasny", icon: Sun },
+  { value: "system", label: "Systemowy", icon: Laptop },
+];
+
+const COLUMNS_OPTIONS = [
+  { value: "2", label: "2 kolumny" },
+  { value: "3", label: "3 kolumny" },
+  { value: "auto", label: "Automatycznie" },
+];
+
+const SEEN_MODE_OPTIONS = [
+  { value: "off", label: "Wyłączone" },
+  { value: "dim", label: "Wyszarzaj (domyślne)" },
+  { value: "hide", label: "Ukrywaj całkowicie" },
 ];
 
 // ─── Dropdown ─────────────────────────────────────────────────────────────────
@@ -128,122 +161,274 @@ function FilterDropdown<T extends string>({
   );
 }
 
-// ─── Mobile filter drawer ─────────────────────────────────────────────────────
+// ─── Settings Modal/Drawer ────────────────────────────────────────────────────
 
-function MobileFilterDrawer({ filters, onChange, activeCount, hasSerpApi }: {
-  filters: Filters; onChange: (f: Partial<Filters>) => void; activeCount: number; hasSerpApi: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const useGoogle = Array.isArray(filters.source) ? filters.source.includes("serpapi") : filters.source === "serpapi";
+function SettingsModal({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+  const isMobile = useIsMobile();
+  const utils = trpc.useUtils();
+  const { data: settings } = trpc.system.settings.get.useQuery();
+  const setSetting = trpc.system.settings.set.useMutation({
+    onSuccess: () => utils.system.settings.get.invalidate()
+  });
+  const setManySettings = trpc.system.settings.setMany.useMutation({
+    onSuccess: () => utils.system.settings.get.invalidate()
+  });
+  const clearSeen = trpc.seen.clear.useMutation();
+  const clearFavs = trpc.favs.clear.useMutation();
 
-  return (
-    <>
-      <button onClick={() => setOpen(true)}
-        className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap flex-shrink-0 ${activeCount > 0 ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
-        <SlidersHorizontal size={13} />
-        <span>Filters</span>
-        {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
-      </button>
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent className="flex flex-col bg-background" style={{ maxHeight: "85vh" }}>
-          <DrawerHeader className="border-b border-border pb-3">
-            <div className="flex items-center justify-between">
-              <DrawerTitle className="text-foreground font-semibold text-base">Filters</DrawerTitle>
-              <DrawerClose asChild>
-                <button aria-label="Close filters" className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
-              </DrawerClose>
-            </div>
-          </DrawerHeader>
-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
-            {/* Google Toggle */}
-            {hasSerpApi && (
-               <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-card">
-                 <label htmlFor="google-toggle-mobile" className="text-sm font-medium text-foreground">Use Google (SerpApi)</label>
-                 <Checkbox
-                   id="google-toggle-mobile"
-                   checked={useGoogle}
-                   onCheckedChange={(checked) => onChange({ source: checked ? ["serpapi", "bing", "yandex"] : "auto" })}
-                 />
-               </div>
-            )}
-            {/* Type */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</p>
-              <div className="grid grid-cols-3 gap-2">
-                {TYPE_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => onChange({ imageType: opt.value })}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-center transition-all ${filters.imageType === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                    {opt.label}
-                  </button>
-                ))}
+  const [braveKey, setBraveKey] = useState("");
+  const [serpapiKey, setSerpapiKey] = useState("");
+
+  if (!settings) return null;
+
+  const handleUpdate = (key: string, value: string) => {
+    setSetting.mutate({ key, value });
+  };
+
+  const handleSaveKeys = () => {
+    const updates = [];
+    if (braveKey) updates.push({ key: "brave_api_key", value: braveKey });
+    if (serpapiKey) updates.push({ key: "serpapi_key", value: serpapiKey });
+    if (updates.length > 0) {
+      setManySettings.mutate({ settings: updates }, {
+        onSuccess: () => {
+          toast.success("Klucze API zostały zapisane");
+          setBraveKey("");
+          setSerpapiKey("");
+        }
+      });
+    }
+  };
+
+  const exportFavs = async () => {
+    const favs = await utils.favs.list.fetch();
+    const blob = new Blob([JSON.stringify(favs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "visua_ulubione.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const content = (
+    <div className="p-4 sm:p-6 space-y-8 overflow-y-auto max-h-[70vh]">
+      {/* Search Section */}
+      <section className="space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
+          <Search size={16} /> Wyszukiwanie
+        </h3>
+        <div className="grid gap-4">
+          <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-card/50">
+             <div className="flex flex-col">
+               <span className="text-sm font-medium">SafeSearch</span>
+               <span className="text-xs text-muted-foreground">Filtruj treści dla dorosłych</span>
+             </div>
+             <Checkbox
+               checked={settings.safesearch === "active"}
+               onCheckedChange={(checked) => handleUpdate("safesearch", checked ? "active" : "off")}
+             />
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+             <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Languages size={12} /> Język wyników
+                </label>
+                <select
+                  className="w-full h-10 px-3 rounded-xl border border-border bg-card text-sm outline-none focus:border-primary/50"
+                  value={settings.search_lang}
+                  onChange={(e) => handleUpdate("search_lang", e.target.value)}
+                >
+                  {LANG_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+             </div>
+             <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Globe size={12} /> Kraj
+                </label>
+                <select
+                  className="w-full h-10 px-3 rounded-xl border border-border bg-card text-sm outline-none focus:border-primary/50"
+                  value={settings.search_country}
+                  onChange={(e) => handleUpdate("search_country", e.target.value)}
+                >
+                  {COUNTRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sources & API */}
+      <section className="space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
+          <Key size={16} /> Źródła i API
+        </h3>
+        <div className="space-y-3">
+          {[
+            { id: "brave", label: "Brave Search", enabledKey: "brave_enabled", setKey: "brave_api_key_set", state: braveKey, setState: setBraveKey },
+            { id: "serpapi", label: "Google (SerpApi)", enabledKey: "serpapi_enabled", setKey: "serpapi_key_set", state: serpapiKey, setState: setSerpapiKey },
+          ].map(api => (
+            <div key={api.id} className="p-4 rounded-xl border border-border bg-card/50 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">{api.label}</span>
+                  {settings[api.setKey] && <Check size={14} className="text-green-500" />}
+                </div>
+                <Checkbox
+                  checked={settings[api.enabledKey] === "true"}
+                  onCheckedChange={(checked) => handleUpdate(api.enabledKey, checked ? "true" : "false")}
+                />
+              </div>
+              <div className="relative">
+                <Input
+                  type="password"
+                  placeholder={settings[api.setKey] ? "••••••••••••••••" : "Wprowadź klucz API..."}
+                  className="pr-10 h-10 rounded-xl"
+                  value={api.state}
+                  onChange={(e) => api.setState(e.target.value)}
+                />
+                <Key size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
-            {/* Size */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Size</p>
-              <div className="grid grid-cols-3 gap-2">
-                {SIZE_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => onChange({ imageSize: opt.value })}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-medium border text-center transition-all ${filters.imageSize === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Color */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Color</p>
-              <div className="grid grid-cols-4 gap-2">
-                {COLOR_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => onChange({ imageColor: opt.value })}
-                    className={`flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-xl text-[10px] font-medium border transition-all ${filters.imageColor === opt.value ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                    <span className="w-5 h-5 rounded-full border border-white/20 flex-shrink-0" style={{ background: opt.dot || "transparent" }} />
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Safe search */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Safe Search</p>
-              <div className="grid grid-cols-2 gap-2">
-                {(["active", "off"] as SafeSearch[]).map((v) => (
-                  <button key={v} onClick={() => onChange({ safeSearch: v })}
-                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${filters.safeSearch === v ? (v === "off" ? "border-destructive/60 text-destructive bg-destructive/10" : "border-primary/60 text-primary bg-primary/10") : "border-border text-muted-foreground hover:text-foreground"}`}>
-                    {v === "active" ? <Shield size={12} /> : <ShieldOff size={12} />}
-                    {v === "active" ? "Safe On" : "Safe Off"}
-                  </button>
-                ))}
-              </div>
+          ))}
+          <Button onClick={handleSaveKeys} className="w-full rounded-xl gap-2 font-medium" disabled={!braveKey && !serpapiKey}>
+             <Save size={16} /> Zapisz klucze
+          </Button>
+        </div>
+      </section>
+
+      {/* Appearance */}
+      <section className="space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
+          <Palette size={16} /> Wygląd
+        </h3>
+        <div className="grid gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">Motyw</label>
+            <div className="grid grid-cols-3 gap-2">
+              {THEME_OPTIONS.map(o => (
+                <button key={o.value} onClick={() => handleUpdate("theme", o.value)}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${settings.theme === o.value ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:border-border/80"}`}>
+                  <o.icon size={16} />
+                  {o.label}
+                </button>
+              ))}
             </div>
           </div>
-          <DrawerFooter className="border-t border-border pt-3">
-            <div className="flex gap-2">
-              {activeCount > 0 && (
-                <Button variant="outline" className="flex-1 border-border text-foreground hover:bg-accent rounded-xl" onClick={() => onChange(DEFAULT_FILTERS)}>Reset all</Button>
-              )}
-              <Button className="flex-1 rounded-xl font-medium" style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }} onClick={() => setOpen(false)}>Apply</Button>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Grid3X3 size={12} /> Kolumny siatki
+            </label>
+            <select
+              className="w-full h-10 px-3 rounded-xl border border-border bg-card text-sm outline-none focus:border-primary/50"
+              value={settings.grid_columns}
+              onChange={(e) => handleUpdate("grid_columns", e.target.value)}
+            >
+              {COLUMNS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Privacy */}
+      <section className="space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-primary uppercase tracking-wider">
+          <Shield size={16} /> Prywatność
+        </h3>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Eye size={12} /> Widziane zdjęcia
+            </label>
+            <select
+              className="w-full h-10 px-3 rounded-xl border border-border bg-card text-sm outline-none focus:border-primary/50"
+              value={settings.seen_mode}
+              onChange={(e) => handleUpdate("seen_mode", e.target.value)}
+            >
+              {SEEN_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm" className="rounded-xl border-border text-xs gap-1.5" onClick={() => {
+              if (confirm("Czy na pewno chcesz wyczyścić historię widzianych zdjęć?")) {
+                clearSeen.mutate(undefined, { onSuccess: () => { toast.success("Historia wyczyszczona"); utils.search.images.invalidate(); } });
+              }
+            }}>
+              <Trash2 size={14} /> Wyczyść historię
+            </Button>
+            <Button variant="outline" size="sm" className="rounded-xl border-border text-xs gap-1.5" onClick={() => {
+              if (confirm("Czy na pewno chcesz usunąć wszystkie ulubione zdjęcia?")) {
+                clearFavs.mutate(undefined, { onSuccess: () => { toast.success("Ulubione usunięte"); utils.favs.list.invalidate(); } });
+              }
+            }}>
+              <Heart size={14} /> Usuń ulubione
+            </Button>
+          </div>
+          <Button variant="outline" className="w-full rounded-xl gap-2 font-medium border-border" onClick={exportFavs}>
+             <Download size={16} /> Eksportuj ulubione (JSON)
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent className="bg-background max-h-[90vh]">
+          <DrawerHeader className="border-b border-border">
+            <DrawerTitle>Ustawienia</DrawerTitle>
+            <DrawerDescription>Dostosuj działanie i wygląd Visua</DrawerDescription>
+          </DrawerHeader>
+          {content}
+          <DrawerFooter className="border-t border-border pt-4">
+             <DrawerClose asChild><Button variant="outline" className="rounded-xl">Zamknij</Button></DrawerClose>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
-    </>
+    );
+  }
+
+  return (
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300 ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`} style={{ background: "oklch(0 0 0 / 0.85)" }}>
+      <div className="glass rounded-2xl max-w-2xl w-full flex flex-col shadow-2xl bg-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border bg-card/50">
+          <div>
+            <h2 className="text-lg font-bold text-foreground">Ustawienia</h2>
+            <p className="text-xs text-muted-foreground">Dostosuj działanie i wygląd Visua</p>
+          </div>
+          <button onClick={() => onOpenChange(false)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent"><X size={20} /></button>
+        </div>
+        {content}
+        <div className="p-4 border-t border-border bg-card/50 flex justify-end">
+           <Button onClick={() => onOpenChange(false)} className="rounded-xl px-8" style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }}>Gotowe</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
-function FilterBar({ filters, onChange, hasSerpApi }: { filters: Filters; onChange: (f: Partial<Filters>) => void; hasSerpApi: boolean }) {
+function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Partial<Filters>) => void }) {
   const isMobile = useIsMobile();
   const activeCount = Object.entries(filters).filter(([k, v]) => {
-    if (k === "safeSearch") return v === "off";
-    if (k === "source") return v !== "auto";
+    if (k === "safeSearch") return false; // In settings now
+    if (k === "source") return false; // In settings now
     return v !== "all";
   }).length;
 
-  const useGoogle = Array.isArray(filters.source) ? filters.source.includes("serpapi") : filters.source === "serpapi";
-
-  if (isMobile) return <MobileFilterDrawer filters={filters} onChange={onChange} activeCount={activeCount} hasSerpApi={hasSerpApi} />;
+  if (isMobile) {
+    return (
+       <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+         <FilterDropdown label="Typ" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
+         <FilterDropdown label="Rozmiar" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
+         <FilterDropdown label="Kolor" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
+       </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
@@ -251,45 +436,22 @@ function FilterBar({ filters, onChange, hasSerpApi }: { filters: Filters; onChan
         <SlidersHorizontal size={13} />
         {activeCount > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">{activeCount}</span>}
       </div>
-
-      {hasSerpApi && (
-        <div className="flex items-center gap-2 px-3 h-9 rounded-xl border border-border bg-transparent hover:border-border/80 transition-all flex-shrink-0">
-          <Checkbox
-            id="google-toggle"
-            checked={useGoogle}
-            onCheckedChange={(checked) => onChange({ source: checked ? ["serpapi", "bing", "yandex"] : "auto" })}
-          />
-          <label htmlFor="google-toggle" className="text-xs font-medium text-muted-foreground cursor-pointer select-none">Use Google (SerpApi)</label>
-        </div>
-      )}
-
-      <FilterDropdown label="Type" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
-      <FilterDropdown label="Size" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
-      <FilterDropdown label="Color" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
-      <button onClick={() => onChange({ safeSearch: filters.safeSearch === "active" ? "off" : "active" })}
-        className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 flex-shrink-0 whitespace-nowrap ${filters.safeSearch === "off" ? "border-destructive/60 text-destructive bg-destructive/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
-        {filters.safeSearch === "active" ? <Shield size={12} /> : <ShieldOff size={12} />}
-        <span>Safe {filters.safeSearch === "active" ? "On" : "Off"}</span>
-      </button>
-      {activeCount > 0 && (
-        <button onClick={() => onChange(DEFAULT_FILTERS)} className="flex items-center gap-1 px-2 h-9 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
-          <X size={11} />Reset
-        </button>
-      )}
+      <FilterDropdown label="Typ" value={filters.imageType} options={TYPE_OPTIONS} onChange={(v) => onChange({ imageType: v })} />
+      <FilterDropdown label="Rozmiar" value={filters.imageSize} options={SIZE_OPTIONS} onChange={(v) => onChange({ imageSize: v })} />
+      <FilterDropdown label="Kolor" value={filters.imageColor} options={COLOR_OPTIONS} onChange={(v) => onChange({ imageColor: v })} />
     </div>
   );
 }
 
 // ─── Image card ───────────────────────────────────────────────────────────────
 
-function ImageCard({ image, seen, onClick }: { image: ImageResult; seen: boolean; onClick: () => void }) {
+function ImageCard({ image, seen, onClick, columns }: { image: ImageResult; seen: boolean; onClick: () => void; columns: string }) {
   const [loaded, setLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const isMobile = useIsMobile();
 
-  if (imgError) return null; // Don't show broken images
+  if (imgError) return null;
 
-  // Calculate aspect ratio if dimensions available
   const aspectRatio = image.width && image.height ? image.width / image.height : null;
 
   return (
@@ -341,9 +503,9 @@ async function downloadImage(imgUrl: string, onStart: () => void, onDone: () => 
     a.href = blobUrl; a.download = filename; a.style.display = "none";
     document.body.appendChild(a); a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1500);
-    toast.success("Image downloaded");
+    toast.success("Zdjęcie pobrane");
   } catch (err) {
-    toast.error("Could not download this image");
+    toast.error("Nie udało się pobrać zdjęcia");
   } finally {
     onDone();
   }
@@ -388,7 +550,7 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
   const handleCopyLink = () => {
     if (!previewUrl) return;
     navigator.clipboard.writeText(previewUrl);
-    toast.success("Link copied to clipboard");
+    toast.success("Link skopiowany do schowka");
   };
 
   const addFav = trpc.favs.add.useMutation();
@@ -402,10 +564,10 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
       removeFav.mutate({ thumbnailUrl: image.thumbnailUrl }, {
         onSuccess: () => {
           utils.favs.list.invalidate();
-          toast.success("Removed from favorites");
+          toast.success("Usunięto z ulubionych");
         },
         onError: (err) => {
-          toast.error(`Could not remove: ${err.message}`);
+          toast.error(`Błąd: ${err.message}`);
         }
       });
     } else {
@@ -421,10 +583,10 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
       addFav.mutate(favData, {
         onSuccess: () => {
           utils.favs.list.invalidate();
-          toast.success("Added to favorites");
+          toast.success("Dodano do ulubionych");
         },
         onError: (err) => {
-          toast.error(`Could not save: ${err.message}`);
+          toast.error(`Błąd: ${err.message}`);
         }
       });
     }
@@ -459,33 +621,33 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
           <div className="flex gap-2 flex-1">
             <Button onClick={toggleFav} variant="outline" size={isMobile ? "default" : "sm"}
               className={`rounded-xl gap-2 border-border ${isMobile ? "h-11 w-11 p-0" : "h-9 px-3"} ${isFav ? "text-red-500 bg-red-500/10 border-red-500/20" : ""}`}
-              title={isFav ? "Remove from favorites" : "Add to favorites"}>
+              title={isFav ? "Usuń z ulubionych" : "Dodaj do ulubionych"}>
               <Heart size={15} fill={isFav ? "currentColor" : "none"} />
-              {!isMobile && (isFav ? "Saved" : "Save")}
+              {!isMobile && (isFav ? "Zapisano" : "Zapisz")}
             </Button>
             <Button onClick={handleDownload} disabled={downloading} size={isMobile ? "default" : "sm"}
               className={`rounded-xl gap-2 font-medium ${isMobile ? "h-11 px-5 text-sm flex-1" : "h-9 px-4 text-sm"}`}
               style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }}>
               {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-              {downloading ? "Downloading…" : "Download"}
+              {downloading ? "Pobieranie…" : "Pobierz"}
             </Button>
             <Button onClick={handleCopyLink} variant="outline" size={isMobile ? "default" : "sm"}
               className={`rounded-xl gap-2 border-border ${isMobile ? "h-11 w-11 p-0" : "h-9 px-3"}`}
-              title="Copy image link">
+              title="Kopiuj link do zdjęcia">
               <Copy size={15} />
-              {!isMobile && "Copy link"}
+              {!isMobile && "Kopiuj link"}
             </Button>
           </div>
           {image.sourceUrl && (
             <a href={image.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors font-medium text-sm">
-              View source <ExternalLink size={14} />
+              Źródło <ExternalLink size={14} />
             </a>
           )}
         </div>
         {previewUrl && (
           <a href={previewUrl} target="_blank" rel="noopener noreferrer"
              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 self-start">
-            <Maximize2 size={10} /> Open original image in new tab
+            <Maximize2 size={10} /> Otwórz oryginalne zdjęcie w nowej karcie
           </a>
         )}
       </div>
@@ -504,7 +666,7 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
                 {infoBadge}
               </div>
               <DrawerClose asChild>
-                <button aria-label="Close preview" className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent flex-shrink-0"><X size={18} /></button>
+                <button aria-label="Zamknij podgląd" className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent flex-shrink-0"><X size={18} /></button>
               </DrawerClose>
             </div>
           </DrawerHeader>
@@ -523,7 +685,7 @@ function ImagePreview({ image, onClose }: { image: ImageResult; onClose: () => v
             {image.sourceDomain && <p className="text-muted-foreground text-xs mt-1">{image.sourceDomain}</p>}
             {infoBadge}
           </div>
-          <button aria-label="Close preview" onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0 p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
+          <button aria-label="Zamknij podgląd" onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0 p-1 rounded-lg hover:bg-accent"><X size={18} /></button>
         </div>
         {previewContent}
       </div>
@@ -544,11 +706,10 @@ function SkeletonGrid() {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
-function Hero({ onSearch, filters, onFiltersChange, hasSerpApi }: {
+function Hero({ onSearch, filters, onFiltersChange }: {
   onSearch: (q: string) => void;
   filters: Filters;
   onFiltersChange: (f: Partial<Filters>) => void;
-  hasSerpApi: boolean;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -559,24 +720,24 @@ function Hero({ onSearch, filters, onFiltersChange, hasSerpApi }: {
           <Search size={24} className="text-background" />
         </div>
         <h1 className="text-4xl sm:text-5xl font-semibold gradient-text mb-2 tracking-tight">Visua</h1>
-        <p className="text-muted-foreground text-sm sm:text-base max-w-xs mx-auto leading-relaxed">Search the entire internet for images — beautifully.</p>
+        <p className="text-muted-foreground text-sm sm:text-base max-w-xs mx-auto leading-relaxed">Przeszukuj cały internet w poszukiwaniu zdjęć — pięknie.</p>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); if (value.trim()) onSearch(value.trim()); }} className="w-full max-w-xl mt-3">
         <div className="relative flex items-center gap-2">
           <div className="relative flex-1 flex items-center">
             <Search size={17} className="absolute left-4 text-muted-foreground pointer-events-none z-10" />
-            <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Search for any image…"
+            <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Szukaj dowolnego zdjęcia..."
               className="pl-11 pr-28 h-14 text-base rounded-2xl border-border bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/50" autoFocus />
             <Button type="submit" disabled={!value.trim()} className="absolute right-2 h-10 px-5 rounded-xl font-medium text-sm"
               style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }}>
-              Search
+              Szukaj
             </Button>
           </div>
         </div>
       </form>
-      <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} hasSerpApi={hasSerpApi} /></div>
+      <div className="mt-4 w-full max-w-xl"><FilterBar filters={filters} onChange={onFiltersChange} /></div>
       <div className="mt-4 flex flex-wrap gap-2 justify-center">
-        {["Architecture", "Nature", "Abstract art", "Space", "Portraits"].map((s) => (
+        {["Architektura", "Przyroda", "Sztuka abstrakcyjna", "Kosmos", "Portrety"].map((s) => (
           <button key={s} onClick={() => onSearch(s)} className="px-3 py-1.5 rounded-full text-xs text-muted-foreground border border-border hover:border-primary/50 hover:text-foreground transition-all active:scale-95">{s}</button>
         ))}
       </div>
@@ -593,11 +754,11 @@ function TopSearchBar({ query, onSearch }: { query: string; onSearch: (q: string
     <form onSubmit={(e) => { e.preventDefault(); if (value.trim()) onSearch(value.trim()); }} className="flex-1 min-w-0">
       <div className="relative flex items-center">
         <Search size={15} className="absolute left-3 text-muted-foreground pointer-events-none z-10" />
-        <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Search images…"
+        <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Szukaj zdjęć..."
           className="pl-8 pr-20 h-10 rounded-xl border-border bg-card text-foreground placeholder:text-muted-foreground text-sm" />
         <Button type="submit" disabled={!value.trim()} size="sm" className="absolute right-1.5 h-7 px-3 rounded-lg text-xs font-medium"
           style={{ background: "linear-gradient(135deg, oklch(0.72 0.15 50), oklch(0.58 0.18 38))", color: "oklch(0.1 0.005 260)" }}>
-          Search
+          Szukaj
         </Button>
       </div>
     </form>
@@ -627,27 +788,54 @@ function useInfiniteScroll(onLoadMore: () => void, enabled: boolean) {
 const PAGE_SIZE = 30;
 
 export default function Home() {
-  const [dark, setDark] = useDarkMode();
   const [view, setView] = useState<"search" | "favs">("search");
   const [activeQuery, setActiveQuery] = useState("");
   const [allResults, setAllResults] = useState<ImageResult[]>([]);
   const [modalImage, setModalImage] = useState<ImageResult | null>(null);
-  const [source, setSource] = useState<"serpapi" | "bing" | "yandex" | "mixed" | null>(null);
+  const [sources, setSources] = useState<string[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [committedFilters, setCommittedFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<Filters>({
+    imageType: "all", imageSize: "all", imageColor: "all",
+    safeSearch: "active", source: "auto",
+  });
+  const [committedFilters, setCommittedFilters] = useState<Filters>({
+    imageType: "all", imageSize: "all", imageColor: "all",
+    safeSearch: "active", source: "auto",
+  });
   const [seenUrls, setSeenUrls] = useState<Set<string>>(new Set());
   const [currentStart, setCurrentStart] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const scrollPosRef = useRef(0);
 
-  const { data: config } = trpc.system.config.useQuery();
+  const { data: settings } = trpc.system.settings.get.useQuery();
+  useTheme(settings?.theme || "dark");
+
   const markSeenMutation = trpc.seen.mark.useMutation();
-  const clearSeenMutation = trpc.seen.clear.useMutation();
   const { data: favs } = trpc.favs.list.useQuery();
 
+  // Load default filters from settings when they arrive
+  useEffect(() => {
+    if (settings && !activeQuery) {
+       setFilters(prev => ({
+         ...prev,
+         imageType: (settings.default_image_type as any) || "all",
+         imageSize: (settings.default_image_size as any) || "all",
+         safeSearch: (settings.safesearch as any) || "active",
+       }));
+    }
+  }, [settings, activeQuery]);
+
   const { data, isLoading, isFetching, error, refetch } = trpc.search.images.useQuery(
-    { query: activeQuery, start: currentStart, imageType: committedFilters.imageType, imageSize: committedFilters.imageSize, imageColor: committedFilters.imageColor, safeSearch: committedFilters.safeSearch, source: committedFilters.source },
+    {
+      query: activeQuery,
+      start: currentStart,
+      imageType: committedFilters.imageType,
+      imageSize: committedFilters.imageSize,
+      imageColor: committedFilters.imageColor,
+      safeSearch: committedFilters.safeSearch,
+      source: committedFilters.source
+    },
     { enabled: !!activeQuery, retry: false, refetchOnWindowFocus: false, staleTime: 0 }
   );
 
@@ -663,7 +851,7 @@ export default function Home() {
         return [...prev, ...newOnes];
       });
     }
-    setSource(data.source as any);
+    setSources(data.sources || []);
     setHasMore(data.hasMore);
     setLoadingMore(false);
   }, [data, currentStart]);
@@ -674,7 +862,8 @@ export default function Home() {
     setCurrentStart(0);
     setAllResults([]);
     setHasMore(false);
-    setSource(null);
+    setSources([]);
+    // Commit current filters (which might have been updated from defaults)
     setCommittedFilters(filters);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [filters]);
@@ -711,7 +900,6 @@ export default function Home() {
     const scrollPos = scrollPosRef.current;
     console.log("Restoring scroll position:", scrollPos);
     setModalImage(null);
-    // Small delay to ensure any potential scroll-to-top from closing the modal/drawer is neutralized
     setTimeout(() => {
       window.scrollTo({ top: scrollPos, behavior: 'instant' as any });
     }, 100);
@@ -720,18 +908,12 @@ export default function Home() {
     }, 250);
   };
 
-  const handleClearSeen = () => {
-    clearSeenMutation.mutate(undefined, {
-      onSuccess: () => {
-        setSeenUrls(new Set());
-        setAllResults((prev) => prev.map(r => ({ ...r, isSeen: false })));
-        toast.success("Seen history cleared");
-      }
-    });
-  };
-
   const hasResults = allResults.length > 0;
   const isLoadingFirst = isLoading && currentStart === 0;
+
+  // Grid columns logic
+  const gridColumns = settings?.grid_columns || "auto";
+  const gridClass = gridColumns === "2" ? "grid-cols-2 sm:grid-cols-2" : gridColumns === "3" ? "grid-cols-2 sm:grid-cols-3" : "masonry-grid";
 
   return (
     <div className="min-h-screen bg-background">
@@ -749,36 +931,26 @@ export default function Home() {
           {activeQuery && <TopSearchBar query={activeQuery} onSearch={handleSearch} />}
 
           <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-            {source && (
-              <span className="text-[10px] px-2 py-1 rounded-full border whitespace-nowrap hidden xs:block"
-                style={{
-                  borderColor: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.4)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.4)" : source === "mixed" ? "oklch(0.8 0.15 100 / 0.4)" : "oklch(0.65 0.18 200 / 0.4)",
-                  color: source === "serpapi" ? "oklch(0.72 0.15 50)" : source === "yandex" ? "oklch(0.75 0.18 140)" : source === "mixed" ? "oklch(0.8 0.15 100)" : "oklch(0.65 0.18 200)",
-                  background: source === "serpapi" ? "oklch(0.72 0.15 50 / 0.08)" : source === "yandex" ? "oklch(0.75 0.18 140 / 0.08)" : source === "mixed" ? "oklch(0.8 0.15 100 / 0.08)" : "oklch(0.65 0.18 200 / 0.08)",
-                }}>
-                {source === "serpapi" ? "Google" : source === "yandex" ? "Yandex" : source === "mixed" ? (committedFilters.source === "auto" ? "Auto (Bing+Yandex)" : "Combined") : "Bing"}
-              </span>
+            {sources.length > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-muted/30">
+                {sources.map(s => (
+                  <span key={s} className="text-[10px] font-bold text-primary uppercase w-4 text-center" title={s === "serpapi" ? "Google" : s.charAt(0).toUpperCase() + s.slice(1)}>
+                    {s === "serpapi" ? "G" : s.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+              </div>
             )}
 
-
             {/* Favorites */}
-            <button onClick={() => setView(v => v === "search" ? "favs" : "search")} title="My Favorites"
+            <button onClick={() => setView(v => v === "search" ? "favs" : "search")} title="Moje Ulubione"
               className={`p-2 rounded-xl transition-all ${view === "favs" ? "text-red-500 bg-red-500/10" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>
               <Heart size={16} fill={view === "favs" ? "currentColor" : "none"} />
             </button>
 
-            {/* Clear seen */}
-            {(seenUrls.size > 0 || allResults.some(r => r.isSeen)) && view === "search" && (
-              <button onClick={handleClearSeen} title="Clear seen history"
-                className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all">
-                <Trash2 size={16} />
-              </button>
-            )}
-
-            {/* Dark mode */}
-            <button onClick={() => setDark((d) => !d)} title={dark ? "Light mode" : "Dark mode"}
+            {/* Settings */}
+            <button onClick={() => setSettingsOpen(true)} title="Ustawienia"
               className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-all">
-              {dark ? <Sun size={16} /> : <Moon size={16} />}
+              <SettingsIcon size={16} />
             </button>
           </div>
         </div>
@@ -787,7 +959,7 @@ export default function Home() {
         {activeQuery && (
           <div className="border-t border-border">
             <div className="container py-2">
-              <FilterBar filters={filters} onChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} hasSerpApi={!!config?.hasSerpApi} />
+              <FilterBar filters={filters} onChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} />
             </div>
           </div>
         )}
@@ -799,34 +971,34 @@ export default function Home() {
           <div>
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-3xl font-semibold gradient-text">My Favorites</h1>
-                <p className="text-muted-foreground text-sm mt-1">Your curated collection of beautiful images.</p>
+                <h1 className="text-3xl font-semibold gradient-text">Moje Ulubione</h1>
+                <p className="text-muted-foreground text-sm mt-1">Twoja kolekcja pięknych obrazów.</p>
               </div>
-              <Button onClick={() => setView("search")} variant="outline" className="rounded-xl border-border">Back to search</Button>
+              <Button onClick={() => setView("search")} variant="outline" className="rounded-xl border-border">Powrót do wyszukiwania</Button>
             </div>
             {!favs?.length ? (
               <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
                 <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4"><Heart size={32} className="text-muted-foreground" /></div>
-                <h3 className="text-foreground font-medium">No favorites yet</h3>
-                <p className="text-muted-foreground text-sm max-w-xs">Heart some images during your search to see them here.</p>
+                <h3 className="text-foreground font-medium">Brak ulubionych</h3>
+                <p className="text-muted-foreground text-sm max-w-xs">Dodaj serduszko przy zdjęciu podczas wyszukiwania, aby zobaczyć je tutaj.</p>
               </div>
             ) : (
-              <div className="masonry-grid">
+              <div className={gridClass === "masonry-grid" ? "masonry-grid" : "grid " + gridClass + " gap-4"}>
                 {favs.map((img, i) => (
-                  <ImageCard key={img.thumbnailUrl + i} image={img} seen={false} onClick={() => handleImageClick(img)} />
+                  <ImageCard key={img.thumbnailUrl + i} image={img} seen={false} onClick={() => handleImageClick(img)} columns={gridColumns} />
                 ))}
               </div>
             )}
           </div>
         ) : (
           <>
-            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} hasSerpApi={!!config?.hasSerpApi} />}
+            {!activeQuery && <Hero onSearch={handleSearch} filters={filters} onFiltersChange={(p) => setFilters((prev) => ({ ...prev, ...p }))} />}
 
         {isLoadingFirst && (
           <div>
             <div className="flex items-center gap-2 mb-5">
               <Loader2 className="animate-spin text-primary" size={15} />
-              <span className="text-muted-foreground text-sm">Searching for <span className="text-foreground font-medium">&ldquo;{activeQuery}&rdquo;</span>&hellip;</span>
+              <span className="text-muted-foreground text-sm">Szukanie <span className="text-foreground font-medium">&ldquo;{activeQuery}&rdquo;</span>&hellip;</span>
             </div>
             <SkeletonGrid />
           </div>
@@ -835,17 +1007,17 @@ export default function Home() {
         {error && !isLoading && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-destructive/15"><AlertCircle size={24} className="text-destructive" /></div>
-            <h3 className="text-foreground font-medium mb-2">Search failed</h3>
-            <p className="text-muted-foreground text-sm max-w-xs mb-6">{error.message || "An unexpected error occurred."}</p>
-            <Button onClick={() => refetch()} variant="outline" size="sm" className="border-border text-foreground hover:bg-accent">Try again</Button>
+            <h3 className="text-foreground font-medium mb-2">Wyszukiwanie nieudane</h3>
+            <p className="text-muted-foreground text-sm max-w-xs mb-6">{error.message || "Wystąpił nieoczekiwany błąd."}</p>
+            <Button onClick={() => refetch()} variant="outline" size="sm" className="border-border text-foreground hover:bg-accent">Spróbuj ponownie</Button>
           </div>
         )}
 
         {!isLoading && !error && activeQuery && !hasResults && data && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-muted"><ImageOff size={24} className="text-muted-foreground" /></div>
-            <h3 className="text-foreground font-medium mb-2">No images found</h3>
-            <p className="text-muted-foreground text-sm max-w-xs">Try a different search term or adjust your filters.</p>
+            <h3 className="text-foreground font-medium mb-2">Brak wyników</h3>
+            <p className="text-muted-foreground text-sm max-w-xs">Spróbuj wpisać inne hasło lub dostosuj filtry.</p>
           </div>
         )}
 
@@ -854,18 +1026,19 @@ export default function Home() {
             <div className="flex items-center justify-between mb-4 sm:mb-6 gap-2 flex-wrap">
               <p className="text-muted-foreground text-xs sm:text-sm">
                 <span className="text-foreground font-medium">&ldquo;{activeQuery}&rdquo;</span>
-                <span className="ml-2 text-xs">&middot; {allResults.length} images</span>
-                {seenUrls.size > 0 && <span className="ml-2 text-xs">&middot; {seenUrls.size} seen</span>}
+                <span className="ml-2 text-xs">&middot; {allResults.length} obrazów</span>
+                {seenUrls.size > 0 && <span className="ml-2 text-xs">&middot; {seenUrls.size} widzianych</span>}
               </p>
             </div>
 
-            <div className="masonry-grid">
+            <div className={gridClass === "masonry-grid" ? "masonry-grid" : "grid " + gridClass + " gap-4"}>
               {allResults.map((img, i) => (
                 <ImageCard
                   key={img.thumbnailUrl + i}
                   image={img}
                   seen={img.isSeen || seenUrls.has(img.thumbnailUrl) || (img.originalUrl ? seenUrls.has(img.originalUrl) : false)}
                   onClick={() => handleImageClick(img)}
+                  columns={gridColumns}
                 />
               ))}
             </div>
@@ -885,6 +1058,7 @@ export default function Home() {
       </main>
 
       {modalImage && <ImagePreview image={modalImage} onClose={handleCloseModal} />}
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }
