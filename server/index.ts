@@ -9,9 +9,6 @@ import { appRouter } from "./routers";
 import { createContext } from "./_core/trpc";
 import path from "path";
 import { fileURLToPath } from "url";
-import multer from "multer";
-import FormData from "form-data";
-import axios from "axios";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,52 +37,6 @@ async function startServer() {
 
   registerStorageProxy(app);
 
-  const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB
-  });
-
-  // Upload proxy for reverse image search
-  app.post("/api/upload", upload.single("image"), async (req, res) => {
-    try {
-      if (!req.file) {
-        res.status(400).json({ error: "No file uploaded" });
-        return;
-      }
-
-      // SerpApi allows sending the file directly as multipart
-      const serpKey = process.env.SERPAPI_KEY;
-      if (!serpKey) {
-        res.status(500).json({ error: "SerpApi key not configured" });
-        return;
-      }
-
-      // Axios is much more reliable with form-data in Node.js
-      const formData = new FormData();
-      formData.append("engine", "google_lens");
-      // api_key is passed in URL
-      formData.append("file", req.file.buffer, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-      });
-
-      console.log(`[upload] Sending file to SerpApi: ${req.file.originalname} (${req.file.size} bytes)`);
-
-      const serpRes = await axios.post(`https://serpapi.com/search?api_key=${serpKey}&output=json`, formData, {
-        headers: {
-          ...formData.getHeaders(),
-        },
-        timeout: 30000,
-      });
-
-      console.log(`[upload] SerpApi responded with status: ${serpRes.status}`);
-      res.json(serpRes.data);
-    } catch (err) {
-      console.error("[upload] failed:", err);
-      res.status(500).json({ error: "Upload search failed" });
-    }
-  });
-
   // Image download proxy
   app.get("/api/download", async (req, res) => {
     const url = req.query.url as string;
@@ -99,6 +50,7 @@ async function startServer() {
     }
     try {
       const upstream = await fetch(url, {
+        method: req.method, // Support HEAD requests efficiently
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
           Referer: "https://www.google.com/",
@@ -110,11 +62,21 @@ async function startServer() {
         return;
       }
       const contentType = upstream.headers.get("content-type") ?? "image/jpeg";
+      const contentLength = upstream.headers.get("content-length");
+
       res.setHeader("Content-Type", contentType);
       res.setHeader("Cache-Control", "public, max-age=86400");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+
       const rawName = url.split("/").pop()?.split("?")[0] ?? "image";
       const ext = rawName.includes(".") ? "" : ".jpg";
       res.setHeader("Content-Disposition", `attachment; filename="${rawName}${ext}"`);
+
       const buffer = await upstream.arrayBuffer();
       res.send(Buffer.from(buffer));
     } catch (err) {
@@ -127,8 +89,6 @@ async function startServer() {
   app.use("/api/trpc", createExpressMiddleware({ router: appRouter, createContext }));
 
   // Static files (production)
-  // In dev: __dirname = server/, public is at ../dist/public
-  // In prod (esbuild): __dirname = dist/server/, public is at ../public
   const publicDir = path.join(__dirname, "..", "public");
   app.use(express.static(publicDir));
   app.get("*", (_req, res) => {
