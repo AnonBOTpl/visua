@@ -389,10 +389,11 @@ function SettingsModal({ open, onOpenChange }: { open: boolean, onOpenChange: (o
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
 function FilterBar({ filters, onChange, settings }: { filters: Filters; onChange: (f: Partial<Filters>) => void; settings: any }) {
+  const isMobile = useIsMobile();
   const sources = [
-    { id: "bing", label: "Bing + Yandex", always: true },
-    { id: "brave", label: "Brave", keySet: "brave_api_key_set" },
-    { id: "serpapi", label: "Google", keySet: "serpapi_key_set" },
+    { id: "bing", label: "Bing + Yandex", shortLabel: "B+Y", always: true },
+    { id: "brave", label: "Brave", shortLabel: "Brave" , keySet: "brave_api_key_set" },
+    { id: "serpapi", label: "Google", shortLabel: "Google", keySet: "serpapi_key_set" },
   ];
 
   const currentSources = Array.isArray(filters.source) ? filters.source : ["bing", "yandex"];
@@ -429,15 +430,15 @@ function FilterBar({ filters, onChange, settings }: { filters: Filters; onChange
       </div>
 
       {/* Multi-select sources */}
-      <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-border">
+      <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-border flex-shrink-0">
         {sources.map(s => {
           if (!s.always && (!settings || !settings[s.keySet])) return null;
           const active = isSelected(s.id);
           return (
             <button key={s.id} onClick={() => toggleSource(s.id)}
-              className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap ${active ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
+              className={`flex items-center gap-1.5 px-3 h-9 rounded-xl text-[11px] sm:text-xs font-medium border transition-all duration-200 whitespace-nowrap ${active ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"}`}>
               {active && <Check size={11} />}
-              {s.label}
+              {isMobile ? s.shortLabel : s.label}
             </button>
           );
         })}
@@ -461,7 +462,7 @@ function ImageCard({ image, seen, onClick, removing }: { image: ImageResult; see
 
   return (
     <div
-      className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-all duration-500 bg-card ${seen ? "opacity-40" : ""} ${isMobile ? "rounded-lg" : "rounded-xl"} ${removing ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
+      className={`masonry-item group cursor-pointer relative overflow-hidden rounded-xl active:scale-[0.97] transition-all duration-500 bg-card ${seen ? "opacity-40" : ""} ${isMobile ? "rounded-lg" : "rounded-xl"} ${removing ? "opacity-0 scale-95 translate-y-4" : "opacity-100 scale-100 translate-y-0"}`}
       onClick={onClick}
       style={{
         aspectRatio: aspectRatio ? `${aspectRatio}` : undefined,
